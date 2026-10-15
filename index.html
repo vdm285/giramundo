@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Gira la Tierra, toca un país y lee su historia, comida, cultura y lo que pasó un día como hoy.">
+  <meta name="theme-color" content="#07090f">
+  <meta property="og:title" content="Globo Curioso">
+  <meta property="og:description" content="Un globo para mirar y para leer. Sin cuentas y sin anuncios.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>Globo Curioso</title>
+</head>
+<body>
+  <canvas id="c" aria-label="Globo terráqueo. Arrastra para girar. Toca un país para abrirlo. Con el teclado: flechas para girar, más y menos para acercar, Enter para el país del centro."></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+  <header class="top">
+    <a class="logo" href="#mx/historia">Globo Curioso</a>
+    <form id="searchForm" class="search" role="search" autocomplete="off">
+      <input id="q" type="search" placeholder="Busca un país" aria-label="Buscar un país" aria-controls="suggest">
+      <div id="suggest" class="suggest" role="listbox"></div>
+    </form>
+    <button id="lang" class="ghost" type="button" data-action="lang">English</button>
+    <button id="kids" class="switch" type="button" data-action="kids" role="switch" aria-checked="false">
+      <span id="kidsLabel">Modo niños</span>
+      <span class="knob" aria-hidden="true"></span>
+    </button>
+  </header>
+  <p id="coach" class="coach">Gira el globo y toca un país</p>
+  <p id="toast" class="toast" hidden></p>
+  <div id="tip" class="tip" hidden></div>
+  <aside id="card" class="card" aria-live="off"></aside>
+  <nav id="dock" class="dock" aria-label="Acciones"></nav>
+  <dialog id="more"></dialog>
+  <dialog id="about"></dialog>
+  <div id="fallback" hidden></div>
+  <p id="boot-error" class="boot" hidden></p>
+  <div id="live" class="sr" aria-live="polite"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

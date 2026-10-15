@@ -1,0 +1,14 @@
+{
+  "name": "Globo Curioso",
+  "short_name": "Globo",
+  "description": "Gira la Tierra y toca un país.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07090f",
+  "theme_color": "#07090f",
+  "lang": "es",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
