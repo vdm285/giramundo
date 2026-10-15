@@ -223,6 +223,12 @@ function renderTab({ lang, kids, tab, page, loading, country, name, zoneLine, to
     return `<div class="skel"></div><div class="skel short"></div><p class="muted">${esc(t(lang, 'loading'))}</p>`;
   }
   if (!page?.extract) {
+    if ((tab === 'comida' || tab === 'cultura') && country.population != null && country.population < 100) {
+      const who = formatCount(country.population, lang);
+      return `<p>${esc(lang === 'es'
+        ? `Wikipedia no tiene un artículo de ${tab === 'comida' ? 'cocina' : 'cultura'} para este territorio. En los datos viven aquí ${who} personas.`
+        : `Wikipedia has no ${tab === 'comida' ? 'food' : 'culture'} article for this territory. The data counts ${who} people living here.`)}</p>`;
+    }
     const query = tab === 'comida'
       ? (lang === 'es' ? `Gastronomía de ${name}` : `${name} cuisine`)
       : tab === 'cultura'
@@ -235,6 +241,7 @@ function renderTab({ lang, kids, tab, page, loading, country, name, zoneLine, to
   return `
     ${thumb ? `<figure class="shot"><img alt="" src="${thumb}"></figure>` : ''}
     ${page.description ? `<p class="eyebrow">${esc(page.description)}</p>` : ''}
+    ${page.fallbackLang ? `<p class="muted">${esc(page.fallbackLang === 'en' ? (lang === 'es' ? 'No hay un artículo en español. Este párrafo es el de Wikipedia en inglés.' : 'This paragraph is from English Wikipedia.') : (lang === 'es' ? 'Este párrafo es el de Wikipedia en español.' : 'There is no English article. This paragraph is from Spanish Wikipedia.'))}</p>` : ''}
     <p class="prose">${esc(text)}</p>
     <p class="links">
       ${page.url ? `<a href="${esc(page.url)}" target="_blank" rel="noreferrer">${esc(t(lang, 'readMore'))}</a>` : ''}

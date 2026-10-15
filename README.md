@@ -23,7 +23,9 @@ The static build is `npm run build`. GitHub Pages publishes `main` to `https://v
 - **Viajes**: a latitude hint, plus OpenStreetMap, Google Maps and Google Earth. It does not invent a list of sights.
 - **Hoy**: Wikipedia’s “on this day” and the day’s news, live. Lines that mention the country come first. Kid mode drops lines about violence.
 
-The light on the Earth is the real sun. Atlas mode is the paper globe. Disputed borders are named in the card. The map itself is Natural Earth’s de facto drawing.
+The light on the Earth is the real sun. Atlas mode is the paper globe. Disputed borders are named in the card. The map is Natural Earth at 1:50 million, so small countries such as Singapore and Malta are shapes you can tap. A handful of rocks and tiny territories are still a dot.
+
+Every country in the dataset has a history paragraph in Spanish and in English, taken from Wikipedia. Food is filled for 241 of 250 and culture for 244 of 250. Where Spanish has no food article, the card uses the English one and says so. Where nobody lives and nobody wrote an article, the card says that instead of inventing a cuisine.
 
 ## Data
 

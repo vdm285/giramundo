@@ -115,6 +115,14 @@ test('a centered ray hits the front of the globe', () => {
   assert.equal(raySphere({ x: 0, y: 0, z: 3 }, { x: 0, y: 1, z: 0 }, 1), null);
 });
 
+test('the finer map can pick Singapore and still knows Mexico City', () => {
+  const finer = JSON.parse(readFileSync(new URL('../node_modules/world-atlas/countries-50m.json', import.meta.url)));
+  const fineIndex = makeIndex(feature(finer, finer.objects.countries).features);
+  assert.equal(fineIndex.find(-99.1332, 19.4326).properties.name, 'Mexico');
+  assert.equal(fineIndex.find(103.8198, 1.3521).properties.name, 'Singapore');
+  assert.equal(fineIndex.find(14.5147, 35.8989).properties.name, 'Malta');
+});
+
 test('Mexico City is in Mexico and the Gulf of Mexico is not', () => {
   const mx = index.find(-99.1332, 19.4326);
   assert.equal(mx.properties.name, 'Mexico');

@@ -59,7 +59,7 @@ function shadeCountries(countries) {
 export async function loadWorld(base) {
   const [facts, topo] = await Promise.all([
     fetch(`${base}data/facts.json`).then((res) => res.json()),
-    fetch(`${base}data/countries-110m.json`).then((res) => res.json()),
+    fetch(`${base}data/countries-50m.json`).then((res) => res.json()),
   ]);
   const countries = facts.countries.map((country) => ({ ...country, onMap: false }));
   const byIso = new Map(countries.map((c) => [c.iso2, c]));
@@ -69,7 +69,8 @@ export async function loadWorld(base) {
   for (const shape of fc.features) {
     const numeric = shape.id != null && shape.id !== '' ? String(Number(shape.id)) : null;
     let country = numeric && numeric !== 'NaN' ? byCcn.get(numeric) : null;
-    if (shape.properties.name === 'Kosovo') country = byIso.get('XK') || country;
+    const named = { Kosovo: 'XK', 'Indian Ocean Ter.': 'IO' }[shape.properties.name];
+    if (named) country = byIso.get(named) || country;
     if (country) {
       shape.properties.iso2 = country.iso2;
       country.onMap = true;

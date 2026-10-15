@@ -153,7 +153,7 @@ const facts = {
 
 await writeFile(join(root, 'public/data/facts.json'), JSON.stringify(facts));
 await copyFile(
-  join(root, 'node_modules/world-atlas/countries-110m.json'),
-  join(root, 'public/data/countries-110m.json'),
+  join(root, 'node_modules/world-atlas/countries-50m.json'),
+  join(root, 'public/data/countries-50m.json'),
 );
 console.log(`facts ${countries.length}, flags ${flags}, built ${built}, MX pop ${mexico.population} (${mexico.popYear})`);

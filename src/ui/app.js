@@ -295,12 +295,12 @@ function playTour(journey) {
 function syncPins() {
   if (!globe) return;
   const dist = globe.view.dist;
-  const pins = world.countries.filter((c) => c.ll && c.iso2 && !c.onMap && (dist < 2.4 || c.iso2 === ui.iso));
+  const pins = world.countries.filter((c) => c.ll && c.iso2 && !c.onMap && (dist < 3.4 || c.iso2 === ui.iso));
   globe.setPins(pins.map((c) => ({ lat: c.ll[0], lon: c.ll[1], iso2: c.iso2 })));
 }
 
 function pinHit(x, y) {
-  if (!globe || globe.view.dist > 2.5) return null;
+  if (!globe || globe.view.dist > 3.5) return null;
   let best = null;
   let bestD = 22;
   for (const country of world.countries) {

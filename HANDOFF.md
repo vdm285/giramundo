@@ -7,7 +7,8 @@ The sketch lived in `vdm285/ideas` at `interactive-globe/` (`sketch.html`, one d
 - Cinematic Earth (NASA day and night plates, real sun, atmosphere) and an Atlas mode (continent colors, borders via d3-geo).
 - Tap, drag, wheel, pinch, keyboard arrows, search with Mexican nicknames (EUA, Holanda, Malvinas, Inglaterra → a note).
 - 250 countries with flags, World Bank population where the Bank has a 2025 (or latest) figure, capitals, time zones, neighbors.
-- Wikipedia historia / comida / cultura vendored for most countries (240 Spanish history, 157 food, 183 culture). The rest fall back to a live summary.
+- The globe uses Natural Earth 1:50m (`public/data/countries-50m.json`), so Singapore, Malta and the other small states on that file are tappable. Fifteen territories are still only a dot (Bouvet, Tokelau, Tuvalu, and other rocks or overseas scraps the 50m file folds into a parent or omits).
+- Wikipedia layers, vendored, as of the fill on 2026-10-15: history 250/250 in Spanish and English; food 241/250; culture 244/250. A missing Spanish food page uses the English article and the card says so. `tools/fill-gaps.mjs` is the resumable filler.
 - Hoy is live from Wikipedia’s on-this-day and featured news. Kid mode filters violent lines.
 - Quiz, surprise spin, computed tours, compare, share links, home location (default Mexico City, optional geolocation), disputed-border notes.
 - PWA shell (`public/sw.js`, manifest). GitHub Pages workflow on `main`.
@@ -27,7 +28,7 @@ The sketch lived in `vdm285/ideas` at `interactive-globe/` (`sketch.html`, one d
 
 ## Known limits
 
-- The 1:110m map misses Singapore and other tiny states. Search flies there and, when zoomed in, a dot is drawn. Tapping the ocean next to them still hits the neighbor.
+- Fifteen territories are not a separate shape even at 1:50m. Search still flies to them and draws a dot when you are zoomed in.
 - Crimea falls inside the Russia shape in this Natural Earth file. The Russia and Ukraine cards say so.
 - Jerusalem’s test point falls in the Palestine shape; Tel Aviv falls in Israel. The card does not turn that into a verdict.
 - Laayoune falls inside Morocco; a separate Western Sahara shape remains. Both cards explain it.
