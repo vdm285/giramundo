@@ -113,8 +113,11 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
   // Country ids and palettes.
   const features = world.features;
   const paletteSize = assignIds(features);
-  const idMap = paintIdMap(features);
-  const borderMap = paintBorders(features);
+  // The country-id and border maps are precomputed PNGs (npm run maps), so
+  // startup does not paint two 4096x2048 canvases. Painting in the browser
+  // remains the fallback if either image fails to load.
+  const idMap = { tex: null };
+  const borderMap = { tex: null };
   const atlasPalette = createPalette(paletteSize);
   const dataPalette = createPalette(paletteSize);
   atlasPalette.clear([220, 210, 190]);
@@ -549,6 +552,37 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
   }
   loadTexture(`${T}earth-night.jpg`, THREE.SRGBColorSpace).then((tex) => { if (tex) { uniforms.nightMap.value = tex; uniforms.hasNight.value = 1; } });
   loadTexture(`${T}earth-water.png`, THREE.NoColorSpace).then((tex) => { if (tex) { uniforms.waterMap.value = tex; uniforms.hasWater.value = 1; } });
+  // Country ids (nearest, no mips) and borders (linear, mips).
+  new THREE.TextureLoader().load(`${T}idmap.png`, (tex) => {
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.anisotropy = 1;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    idMap.tex = tex;
+    uniforms.idMap.value = tex;
+    dirtyFrames = 4;
+  }, undefined, () => {
+    const painted = paintIdMap(features);
+    idMap.tex = painted.tex;
+    uniforms.idMap.value = painted.tex;
+  });
+  new THREE.TextureLoader().load(`${T}borders.png`, (tex) => {
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.anisotropy = 8;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    borderMap.tex = tex;
+    uniforms.borderMap.value = tex;
+    dirtyFrames = 4;
+  }, undefined, () => {
+    const painted = paintBorders(features);
+    borderMap.tex = painted.tex;
+    uniforms.borderMap.value = painted.tex;
+  });
+
   // Relief and clouds only in Full quality: Simple never downloads them.
   let richLoading = false;
   function loadRich() {

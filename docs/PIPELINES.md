@@ -455,3 +455,29 @@ rm -r data/cache/wikidata      # to force fresh data (shared with npm run places
 ```
 
 Check the console summary (anthems with audio, countries with at least 6 people, languages), then open `public/data/culture.json` and look at `MX`, `JP` and `FR`. Commit the file.
+
+## Precomputed maps
+
+`npm run maps` → `public/textures/idmap.png` and `public/textures/borders.png`. The shader used to get these from two 4096x2048 canvases painted at startup (`paintIdMap`, `paintBorders` in `src/globe/paint.js`), which froze slow machines for about a second. Now they are painted once, offline, from `public/data/countries-50m.json`. Re-run whenever that file changes. Takes about 4 seconds.
+
+### Steps
+
+1. `tools/build-maps.mjs` (Node) turns the TopoJSON into features in file order (`id` = index + 1, the same `assignIds` rule the app uses) and projects every polygon with d3-geo's `geoEquirectangular` path into a recording context, so the rings are cut at the antimeridian exactly as the browser cut them (Russia, Fiji and Antarctica's pole cap). Each emitted piece is sorted into outer or hole by the sign of its area in pixel space. Output: `data/cache/maps/rings.json` (gitignored) as `{ width, height, features: [{ id, name, numeric, area, rings, holes }] }` with pixel coordinates, `area` being the feature's bbox area in texels. It then spawns the two Python scripts and checks the files exist.
+2. `tools/paint-maps.py` (Pillow) fills the id map with `ImageDraw.polygon` (no anti-aliasing), largest bbox first so enclaves paint over their hosts; each feature's holes are filled black right after its outer rings; a 1 px same-color outline keeps sub-texel countries on the map. A country left with no texel because a neighbor covers it (Sint Maarten under St-Martin: one texel is about 10 km) gets one texel at its centroid. The borders are drawn as 3 px lines at 8192x4096 and Lanczos-downsampled to 4096x2048; segments d3 added along the antimeridian or the pole edge are skipped so there is no seam line through Chukotka.
+3. `tools/check-maps.py` reads `idmap.png` back and samples Mexico City, Maseru, the Caspian, the mid-Pacific, Singapore, the South Pole, Chukotka east of 180, Fiji, San Marino, the Vatican, Monaco and Pretoria. The build fails if any decodes to the wrong id.
+
+### Files
+
+| File | Size | Encoding |
+| --- | --- | --- |
+| `public/textures/idmap.png` | 4096x2048, palette PNG (242 entries, byte-exact with the RGB image), 86 KB | `R = id & 255`, `G = (id >> 8) & 255`, `B = 0`; ocean and lakes `(0, 0, 0)` |
+| `public/textures/borders.png` | 4096x2048, LA PNG, 430 KB | `L = 255` everywhere; `A` = outline coverage, 1.5 px wide, quantized to 32 levels |
+
+Both are equirectangular with longitude 0 at the center and north at the top: `x = (lon + 180) / 360 * 4096`, `y = (90 - lat) / 180 * 2048`. Sample them like the NASA plates (`uv.x + 0.5`).
+
+### Loading in the app
+
+- Both: `THREE.TextureLoader`, default `flipY = true` (the same orientation `CanvasTexture` had), `colorSpace = NoColorSpace`, `wrapS = RepeatWrapping`, `wrapT = ClampToEdgeWrapping`.
+- `idmap.png`: `magFilter = minFilter = NearestFilter`, `generateMipmaps = false`, `anisotropy = 1`. Any filtering blends ids into a neighbor's.
+- `borders.png`: `LinearFilter` with mipmaps and anisotropy as before; the shader reads `.a`.
+- The ids only match while the app assigns them the same way (`feature(topo, topo.objects.countries).features[i].properties.id = i + 1`). Rebuild the PNGs with the map.

@@ -17,7 +17,8 @@
     "news": "node tools/build-news.mjs",
     "radio": "node tools/build-radio.mjs",
     "cities": "node tools/build-cities.mjs",
-    "culture": "node tools/build-culture.mjs"
+    "culture": "node tools/build-culture.mjs",
+    "maps": "node tools/build-maps.mjs"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",
