@@ -1,6 +1,6 @@
 # Giramundo
 
-Spin the Earth. Tap a country. See it, know it, and feel what is happening there right now: headlines, weather, local time, history, food, culture, World Heritage sites with photos, walking-tour videos, Street View, and forty years of data. Spanish first, English one click away. Free, no account, no ads, no server.
+Spin the Earth. Tap a country. See it, know it, and feel what is happening there right now: headlines with background, local radio, weather, local time, history, food, culture with anthem and people, World Heritage sites with photos, cities, walking-tour videos, Street View, and sixty years of data. Then play: guess the country, take a tour, compare two places. Spanish first, English one click away. Free, no account, no ads, no server.
 
 Live: https://vdm285.github.io/giramundo/
 

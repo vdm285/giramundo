@@ -45,13 +45,16 @@ The state of the code after the rebuild. `docs/VISION.md` is the plan; this file
 
 ## Owner to-do
 
-1. Create a YouTube Data API key and add it as the `YOUTUBE_API_KEY` repository secret (steps in `docs/PIPELINES.md`).
-2. Create a Google Maps Embed API key restricted to `https://vdm285.github.io/*` and set it as `VITE_MAPS_EMBED_KEY` (a repository variable or secret used at build time).
-3. Rename the local folder to `giramundo` to match the repository.
+1. Test the live site in Chrome after a hard refresh (Ctrl+Shift+R) and read the Performance line in Settings; check `chrome://gpu` says WebGL is hardware accelerated. Report the line if it still lags.
+2. Create a YouTube Data API key and add it as the `YOUTUBE_API_KEY` repository secret (steps in `docs/PIPELINES.md`).
+3. Create a Google Maps Embed API key restricted to `https://vdm285.github.io/*` and set it as the `VITE_MAPS_EMBED_KEY` repository variable (already read by the workflow).
+4. Rename the local folder to `D:\_GitHub\giramundo` to match the repository (one `Rename-Item` in PowerShell with nothing open in the folder).
 
 ## If you continue
 
-1. Phase 4 in `docs/VISION.md`: guess-the-country with distance shading, country of the day, narrated tours using `addArc`, a rebuilt compare.
-2. 8k day plate loaded only when close; the uniforms already accept any size.
-3. Cities as a second tap level; the id-map approach extends to any polygon set.
-4. Do not weaken `tests/geo.test.mjs`. The frame bugs are silent until you screenshot the wrong continent.
+1. Agreed next step: feature-by-feature review cards with Victor, starting with Ahora (news order, radio curation, weather, background block), then Ver, then Play. Apply answers one feature at a time.
+2. Datos: year playback on the globe (slider animating indicators; `setDataColors` already repaints in one call).
+3. Historia: a timeline from Wikidata events and Wikipedia history sections, with uneven coverage labeled.
+4. Radio curation: tune `localScore` in `tools/build-radio.mjs` with real feedback; consider a "talk only" filter.
+5. Phone layout polish is last by decision; the bottom sheet works but is unrefined.
+6. Do not weaken `tests/geo.test.mjs`. The frame bugs are silent until you screenshot the wrong continent.

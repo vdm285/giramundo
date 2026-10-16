@@ -54,8 +54,10 @@ Keys the owner creates once, at no cost: a YouTube Data API key (Actions secret,
 
 Phases are built in order. Each ends with a deploy and a check-in.
 
-1. **Foundation** (in progress): rename to Giramundo, research, this document, remove the bland parts (kid mode switch, text-to-speech, templated hooks, family question), clean baseline on `main`.
-2. **The globe**: a renderer that does not look cheap. Clouds with shadows, terrain relief, atmospheric scattering, dusk band, city lights, ocean glint, a glowing outline for the selected country instead of a flat fill, twinkling stars, smooth flights. Live ambient layers: day/night, recent earthquakes, the ISS. Earth, Atlas and Data views. The flat 2D map (equirectangular, zoomable, same picking, same dossier).
+Status on 2026-10-16: phases 1 to 4 shipped in their first versions (see `HANDOFF.md`); what remains in each is listed there. Next: feature-by-feature review with the owner, year playback in Datos, a Historia timeline.
+
+1. **Foundation** (done): rename to Giramundo, research, this document, remove the bland parts (kid mode switch, text-to-speech, templated hooks, family question), clean baseline on `main`.
+2. **The globe** (done): a renderer that does not look cheap. Clouds with shadows, terrain relief, atmospheric scattering, dusk band, city lights, ocean glint, a glowing outline for the selected country instead of a flat fill, twinkling stars, smooth flights. Live ambient layers: day/night, recent earthquakes, the ISS. Earth, Atlas and Data views. The flat 2D map (equirectangular, zoomable, same picking, same dossier).
 3. **The dossier**: the sections above, the pipelines behind them, and the Actions schedule.
 4. **Things to do**: a guess-the-country game with distance shading, a country of the day, narrated tours with flight arcs, a rebuilt compare mode, "surprise me" that lands on something interesting.
 5. **Later**: phone layout, kid mode, optional user-supplied AI key for summaries, travel links (flights, stays) with approximate costs, VR, news-outlet bias disclosure and user-chosen outlets.
