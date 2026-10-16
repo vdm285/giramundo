@@ -5,23 +5,27 @@
 export const SECTIONS = ['ahora', 'historia', 'comida', 'cultura', 'lugares', 'ver', 'datos'];
 const SECTION_SET = new Set(SECTIONS);
 
+// A city inside a country: #mx/ciudad/mx-guadalajara (the id comes from
+// public/data/cities.json).
 export function parseHash(hash) {
   const parts = String(hash || '').replace(/^#\/?/, '').split('/').filter(Boolean);
   if (!parts.length) return null;
   const iso = /^[a-z]{2}$/i.test(parts[0]) ? parts[0].toUpperCase() : null;
   const placeId = iso ? null : parts[0];
+  const city = parts[1] === 'ciudad' && parts[2] ? parts[2] : null;
   const section = SECTION_SET.has(parts[1]) ? parts[1] : null;
   let lang = null;
   if (parts.includes('en')) lang = 'en';
   else if (parts.includes('es')) lang = 'es';
-  return { iso, placeId, section, lang };
+  return { iso, placeId, section, city, lang };
 }
 
-export function buildHash({ iso, placeId, section, lang }) {
+export function buildHash({ iso, placeId, section, city, lang }) {
   const id = (iso || placeId || '').toLowerCase();
   if (!id) return '#';
   const parts = [id];
-  if (section && section !== 'historia') parts.push(section);
+  if (city) parts.push('ciudad', city);
+  else if (section && section !== 'historia') parts.push(section);
   if (lang === 'en') parts.push('en');
   return `#${parts.join('/')}`;
 }

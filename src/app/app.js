@@ -14,6 +14,7 @@ import { renderDossier } from '../dossier/dossier.js';
 import * as live from '../live/sources.js';
 import { createRadio, shortName } from '../live/radio.js';
 import { renderGame, renderPlayMenu, renderTourBar } from '../dossier/play.js';
+import { renderCity } from '../dossier/city.js';
 import { createPlay } from './play.js';
 import { createStore, readSetting, writeSetting } from './state.js';
 
@@ -107,7 +108,8 @@ async function loadContent(country) {
   const patch = (more) => {
     if (!alive()) return;
     Object.assign(content, more);
-    store.set({ content: { ...content } });
+    // Merge over the store's copy so city keys added meanwhile survive.
+    store.set({ content: { ...store.get().content, ...more } });
   };
   store.set({ content: {} });
   const lang = s.lang;
@@ -142,6 +144,7 @@ async function loadContent(country) {
   live.rates().then((rates) => patch({ rates }));
   live.quakesWeek().then((quakes) => patch({ quakes }));
   live.wikiToday(lang).then((today) => patch({ today }));
+  live.wikiMostRead(lang).then((mostRead) => patch({ mostRead }));
 
   // Weather at the capital when Wikipedia knows where it is; else the center.
   const capitalName = country.capital?.[lang] || country.capital?.en;
@@ -169,13 +172,68 @@ function flyToCountry(country, turns = 0) {
   surface.flyTo(country.ll[0], country.ll[1] + shift, dist, { turns });
 }
 
+// ---------- cities ----------
+
+let cityToken = 0;
+
+function openCity(city) {
+  if (!city) return;
+  const s = store.get();
+  const iso = city.id.slice(0, 2).toUpperCase();
+  if (s.id !== iso) {
+    // Different country: select it without flying, then land on the city.
+    select(iso, { fly: false });
+  }
+  store.set({ city, collapsed: false, place: null, playmenu: false, content: { ...store.get().content, citySummary: undefined, cityWeather: null, cityHero: null, playing: null } });
+  surface?.setBeacon(city.ll[0], city.ll[1]);
+  surface?.flyTo(city.ll[0], city.ll[1] + cityShift(), 1.42);
+  syncMarkers();
+  loadCityContent(city);
+  requestAnimationFrame(() => { const el = document.querySelector('.dossier-scroll'); if (el) el.scrollTop = 0; });
+}
+
+function cityShift() {
+  const dossier = document.querySelector('.dossier');
+  const covered = dossier && !store.get().collapsed && window.innerWidth >= 920 ? dossier.getBoundingClientRect().width + 20 : 0;
+  const radiusPx = (1 / (1.42 * Math.tan((32 * Math.PI / 180) / 2))) * (window.innerHeight / 2);
+  return (covered / 2) * (57.3 / Math.max(80, radiusPx));
+}
+
+function closeCity() {
+  const s = store.get();
+  store.set({ city: null });
+  const country = countryOf(s.id);
+  if (country?.ll) { surface?.setBeacon(country.ll[0], country.ll[1]); flyToCountry(country); }
+  syncMarkers();
+}
+
+async function loadCityContent(city) {
+  const my = ++cityToken;
+  const lang = store.get().lang;
+  const alive = () => my === cityToken && store.get().city?.id === city.id;
+  const patch = (more) => { if (alive()) store.set({ content: { ...store.get().content, ...more } }); };
+  const title = city.name?.[lang] || city.name?.en;
+  const [summary, weather] = await Promise.all([
+    live.wikiSummary(lang, title).then((s) => s || (lang === 'es' ? live.wikiSummary('en', city.name?.en) : null)),
+    live.weatherAt(city.ll[0], city.ll[1]),
+  ]);
+  patch({ citySummary: summary || null, cityWeather: weather });
+  const main = summary?.image || summary?.thumb || '';
+  const flaggy = /flag|bandera|coat|escudo|emblem|seal|map|mapa|locat|\.svg/i.test(main);
+  if (main && !flaggy) patch({ cityHero: { src: main, credit: 'Wikipedia', link: summary?.url || '' } });
+  else {
+    const photo = await live.wikiPhoto(lang, summary?.title || title);
+    if (photo) patch({ cityHero: { src: photo.src, credit: photo.caption ? photo.caption.slice(0, 60) : 'Wikimedia Commons', link: photo.page } });
+  }
+}
+
 function select(id, { fly = true, turns = 0, section } = {}) {
   const country = countryOf(id);
   if (!country) return;
   const s = store.get();
   const feature = featureOf(country);
   if (s.compare && s.compare !== id && id !== s.id) play?.clearCompare();
-  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false });
+  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false, city: null });
   writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
@@ -196,6 +254,12 @@ function syncMarkers() {
   for (const c of world.countries) {
     if (!c.ll || !c.iso2 || c.onMap) continue;
     if (dist < 3.2 || c.iso2 === s.id) markers.push({ lat: c.ll[0], lon: c.ll[1], id: c.iso2, color: '#f6d78a', size: 9, kind: 'country' });
+  }
+  const cities = country?.iso2 ? world.cities?.[country.iso2] : null;
+  if (cities && (dist < 2.0 || s.city)) {
+    for (const c of cities) {
+      markers.push({ lat: c.ll[0], lon: c.ll[1], id: c.id, color: c.capital ? '#ffd27a' : '#fff4dc', size: c.capital ? 9 : 7, kind: 'city', city: c, highlight: s.city?.id === c.id });
+    }
   }
   const places = country?.iso2 ? world.places?.[country.iso2]?.heritage : null;
   if (places && (s.section === 'lugares' || dist < 2.2)) {
@@ -280,6 +344,7 @@ function onTap(event) {
     return;
   }
   const marker = surface.markerAt(event.clientX, event.clientY);
+  if (marker?.kind === 'city') { openCity(marker.city); return; }
   if (marker?.kind === 'place') {
     store.set({ place: marker.place, section: 'lugares', collapsed: false });
     syncMarkers();
@@ -302,6 +367,7 @@ function onMove(event) {
   let label = '';
   let feature = null;
   if (marker?.kind === 'place') label = marker.place.label?.[s.lang] || marker.place.label?.en || '';
+  else if (marker?.kind === 'city') label = marker.city.name?.[s.lang] || marker.city.name?.en || '';
   else if (marker?.kind === 'country') label = countryOf(marker.id)?.name?.[s.lang] || '';
   else {
     const ll = surface.pickLatLon(event.clientX, event.clientY);
@@ -383,8 +449,8 @@ async function on(action, payload) {
       break;
     }
     case 'share': {
-      const url = `${location.origin}${location.pathname}${buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, lang: s.lang })}`;
-      const title = `${countryOf(s.id)?.name?.[s.lang] || ''} · Giramundo`;
+      const url = `${location.origin}${location.pathname}${buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang })}`;
+      const title = `${s.city ? (s.city.name?.[s.lang] || s.city.name?.en) : (countryOf(s.id)?.name?.[s.lang] || '')} · Giramundo`;
       if (navigator.share) navigator.share({ title, url }).catch(() => {});
       else navigator.clipboard?.writeText(url).then(() => toast(t(s.lang, 'copied')));
       break;
@@ -404,6 +470,8 @@ async function on(action, payload) {
     case 'tour-stop': play.stopTour(); break;
     case 'compare': play.startCompare(); toast(t(s.lang, 'comparePick')); document.getElementById('q')?.focus(); break;
     case 'compare-clear': play.clearCompare(); break;
+    case 'city': openCity(payload); break;
+    case 'city-close': closeCity(); break;
     case 'radio-play': radio.play(payload.station, payload.iso2); break;
     case 'radio-toggle': radio.toggle(); break;
     case 'radio-stop': radio.stop(); break;
@@ -534,7 +602,9 @@ function shell(s) {
       <div class="dossier-scroll">
         ${s.game
           ? renderGame({ lang: s.lang, game: s.game, world, on, base })
-          : renderDossier({ ...s, country, world, places, on, base, feature: featureOf(country) })}
+          : s.city
+            ? renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base })
+            : renderDossier({ ...s, country, world, places, on, base, feature: featureOf(country) })}
       </div>
     </aside>
     <dialog id="about">
@@ -692,6 +762,7 @@ export async function boot() {
     compare: null,
     picking: false,
     playmenu: false,
+    city: null,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
@@ -720,9 +791,9 @@ export async function boot() {
     document.body.classList.toggle('empty', !s.id && !s.game);
     document.body.classList.toggle('picking', Boolean(s.picking));
     render(shell(s), ui);
-    const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, lang: s.lang });
+    const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
     if (location.hash !== next) history.replaceState(null, '', next);
-    const name = countryOf(s.id)?.name?.[s.lang];
+    const name = s.city ? (s.city.name?.[s.lang] || s.city.name?.en) : countryOf(s.id)?.name?.[s.lang];
     document.title = name ? `${name} · Giramundo` : 'Giramundo';
   };
   store.subscribe(draw);
@@ -748,9 +819,19 @@ export async function boot() {
     const s = store.get();
     if (next.lang && next.lang !== s.lang) on('lang');
     const id = next.iso || next.placeId;
+    if (next.city) {
+      const city = (world.cities?.[next.iso] || []).find((c) => c.id === next.city);
+      if (city && city.id !== s.city?.id) openCity(city);
+      return;
+    }
+    if (s.city && !next.city) closeCity();
     if (id && id !== s.id && countryOf(id)) select(id, { section: next.section || s.section });
     else if (next.section && next.section !== s.section) on('section', next.section);
   });
+  if (hashed?.city) {
+    const city = (world.cities?.[hashed.iso] || []).find((c) => c.id === hashed.city);
+    if (city) openCity(city);
+  }
 
   setInterval(() => {
     const lang = store.get().lang;

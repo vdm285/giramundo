@@ -67,6 +67,21 @@ export async function wikiPhoto(lang, title) {
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+// Yesterday's most-read articles (today's are not final yet).
+export async function wikiMostRead(lang) {
+  const d = new Date(Date.now() - 86400000);
+  const host = lang === 'en' ? 'en' : 'es';
+  const data = await getJson(`https://${host}.wikipedia.org/api/rest_v1/feed/featured/${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`, { ttlMs: 3600e3, headers: WIKI_HEADERS });
+  return (data?.mostread?.articles || []).map((a) => ({
+    title: a.titles?.normalized || a.title,
+    extract: a.extract || '',
+    description: a.description || '',
+    url: a.content_urls?.desktop?.page || '',
+    views: a.views,
+    thumb: a.thumbnail?.source || '',
+  }));
+}
+
 export async function wikiToday(lang) {
   const now = new Date();
   const host = lang === 'en' ? 'en' : 'es';

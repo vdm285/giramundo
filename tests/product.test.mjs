@@ -21,12 +21,14 @@ test('search understands Mexican nicknames and does not invent a country', () =>
 test('share links round-trip the country, the section and the language', () => {
   const hash = buildHash({ iso: 'MX', section: 'comida', lang: 'en' });
   assert.equal(hash, '#mx/comida/en');
-  assert.deepEqual(parseHash(hash), { iso: 'MX', placeId: null, section: 'comida', lang: 'en' });
+  assert.deepEqual(parseHash(hash), { iso: 'MX', placeId: null, section: 'comida', city: null, lang: 'en' });
   assert.equal(buildHash({ iso: 'JP', section: 'historia', lang: 'es' }), '#jp');
-  assert.deepEqual(parseHash('#somaliland/ahora'), { iso: null, placeId: 'somaliland', section: 'ahora', lang: null });
+  assert.deepEqual(parseHash('#somaliland/ahora'), { iso: null, placeId: 'somaliland', section: 'ahora', city: null, lang: null });
   assert.equal(parseHash('#mx/nope').section, null);
   assert.equal(parseHash(''), null);
   for (const s of SECTIONS) assert.equal(parseHash(`#fr/${s}`).section, s);
+  assert.equal(buildHash({ iso: 'MX', city: 'mx-guadalajara', lang: 'es' }), '#mx/ciudad/mx-guadalajara');
+  assert.equal(parseHash('#mx/ciudad/mx-guadalajara/en').city, 'mx-guadalajara');
 });
 
 test('disputed places have an adult note in both languages', () => {

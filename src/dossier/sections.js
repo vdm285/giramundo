@@ -109,6 +109,8 @@ export function renderAhora(m) {
     <h2>${t(lang, 'nowHeadlines')}</h2>
     ${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang)}
 
+    ${renderBackground(m)}
+
     ${shown.length ? html`
       <h2>${t(lang, 'nowOnThisDay')}</h2>
       <ol class="events">${shown.map((e) => html`<li><span>${e.year}</span>${e.url ? html`<a href=${e.url} target="_blank" rel="noreferrer">${e.text}</a>` : e.text}</li>`)}</ol>
@@ -119,6 +121,29 @@ export function renderAhora(m) {
       ${quakes.length ? html`<ul class="headlines quakes">${quakes.map((q) => html`<li><a href=${q.url} target="_blank" rel="noreferrer">${q.place}</a><b>M ${q.mag.toFixed(1)}</b></li>`)}</ul><p class="small muted">USGS</p>`
         : html`<p class="small muted">${t(lang, 'nowQuakeNone')}</p>`}` : nothing}
   `;
+}
+
+// "Why is this in the news": Wikipedia's in-the-news and most-read items that
+// mention the country, then the background articles every country has.
+function renderBackground(m) {
+  const { lang, country, content } = m;
+  const name = country.name[lang] || country.name.en;
+  const names = [country.name.es, country.name.en, country.official?.es, country.official?.en].filter(Boolean).map((n) => n.toLowerCase());
+  const mentions = (s) => names.some((n) => (s || '').toLowerCase().includes(n));
+  const inNews = (content.today?.news || []).filter((n) => mentions(n.text) || (n.titles || []).some(mentions)).slice(0, 3);
+  const mostRead = (content.mostRead || []).filter((a) => mentions(a.title) || mentions(a.extract) || mentions(a.description)).slice(0, 4);
+  const host = lang === 'en' ? 'en' : 'es';
+  const go = (q) => `https://${host}.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(q)}&go=Go`;
+  const topics = lang === 'es'
+    ? [['Historia', `Historia de ${name}`], ['Política', `Política de ${name}`], ['Economía', `Economía de ${name}`], ['Geografía', `Geografía de ${name}`], ['Demografía', `Demografía de ${name}`]]
+    : [['History', `History of ${name}`], ['Politics', `Politics of ${name}`], ['Economy', `Economy of ${name}`], ['Geography', `Geography of ${name}`], ['Demographics', `Demographics of ${name}`]];
+  return html`
+    <h2>${t(lang, 'bgTitle')}</h2>
+    ${inNews.length ? html`<h3>${t(lang, 'bgInNews')}</h3><ul class="headlines">${inNews.map((n) => html`<li><a href=${n.url} target="_blank" rel="noreferrer">${n.text}</a></li>`)}</ul>` : nothing}
+    ${mostRead.length ? html`<h3>${t(lang, 'bgMostRead')}</h3><ul class="headlines">${mostRead.map((a) => html`<li><a href=${a.url} target="_blank" rel="noreferrer">${a.title}</a><div class="meta"><span>${a.description || ''}</span></div></li>`)}</ul>` : nothing}
+    ${!inNews.length && !mostRead.length ? html`<p class="small muted">${t(lang, 'bgQuiet')}</p>` : nothing}
+    <div class="chips" style="margin-top:8px"><span>${t(lang, 'bgRead')}</span>${topics.map(([label, q]) => html`<a class="chip" href=${go(q)} target="_blank" rel="noreferrer">${label}</a>`)}</div>
+    <p class="small muted">Wikipedia · CC BY-SA</p>`;
 }
 
 function headlines(news, lang) {
@@ -235,6 +260,11 @@ export function renderVer(m) {
       })}
       <p class="small muted">${t(lang, 'seeCredit')}</p>`
       : html`<p class="muted">${t(lang, 'seeNone')}</p>`}
+    <p class="links">
+      <a href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${country.name.en} walking tour 4K`)}`} target="_blank" rel="noreferrer">${t(lang, 'ytWalk')} ↗</a>
+      <a href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${country.name.en} street food`)}`} target="_blank" rel="noreferrer">${t(lang, 'ytFood')} ↗</a>
+      <a href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${country.name.en} travel vlog`)}`} target="_blank" rel="noreferrer">${t(lang, 'ytTravel')} ↗</a>
+    </p>
 
     <h2>${t(lang, 'seeStreet')}</h2>
     ${MAPS_KEY && ll

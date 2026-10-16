@@ -319,3 +319,60 @@ RADIO_FRESH=1 npm run radio    # clear the cache first: this is the monthly refr
 On Windows PowerShell: `$env:RADIO_FRESH = "1"; npm run radio`.
 
 Check the console summary (playable stations, countries with none, hls-only countries, raw codec mix), open `public/data/radio.json` and look at `MX`, `JP` and `FR`, and try two or three `url` values with `curl -sI -m 8 -L <url>` (expect `audio/mpeg`, `audio/aac`, `audio/aacp` or `audio/ogg`). Commit the file.
+
+## Cities
+
+### What runs
+
+`npm run cities` → `node tools/build-cities.mjs`. Source: [Natural Earth](https://www.naturalearthdata.com) 1:10m **Populated Places**, the full version (not `_simple`), because it carries localized names (`NAME_ES`, `NAME_EN`). Natural Earth is public domain: no credit is required, but the card says "Datos: Natural Earth" like the map does. The GeoJSON (19 MB, 7,342 points) is taken from the `nvkelso/natural-earth-vector` repository, which mirrors the official release (`https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_populated_places.geojson`), and cached in `data/cache/ne/` (gitignored). If that file ever disappears the script falls back to `ne_10m_populated_places_simple.geojson` and warns that the Spanish names will be English.
+
+Rows join to `public/data/facts.json` through `ISO_A2`. Rows Natural Earth marks `-99` join through `ADM0_A3` → facts `iso3`, with aliases for the codes it spells differently (`KOS` → `UNK` Kosovo, `PSX` → `PSE`, `ALD` → `ALA`, `SAH` → `ESH`), then `SOV_A3`. When `ISO_A2` and `ADM0_A3` disagree, the admin-0 unit wins unless it is the sovereign itself: Niue's rows say `NZ`/`NIU` (so Niue), Martinique's say `MQ`/`FRA` (so Martinique). Somaliland (`SOL`, 7 rows) and Northern Cyprus (`CYN`, 2 rows) are not countries in `facts.json` and are left out; the console reports them. "Historic place" (abandoned towns, Chernobyl) and "Meteorological Station" rows are skipped; Antarctica keeps its scientific stations.
+
+Per country: the capital, always, plus the largest places by `POP_MAX`, up to **8** in total (**12** for CN, IN, US, BR, RU, MX, JP, ID, NG, PK). Duplicate names are dropped (case-insensitive English name). The capital is decided per country, in this order: the row whose name is the capital `facts.json` gives (so the dossier and the pin agree: Sucre, Pretoria, Naypyidaw, Dodoma, Porto-Novo, Gitega); otherwise every `FEATURECLA = "Admin-0 capital"` row; otherwise, for dependencies, every `"Admin-0 region capital"` row (Nuuk, Hong Kong, Gibraltar, Nouméa). `"Admin-0 capital alt"` is never a capital (Natural Earth uses it for Kyoto, Lagos, Valparaíso, Tel Aviv), and `"Admin-0 region capital"` is not used when the country has a national capital (it also covers Cardiff, Banja Luka, Batumi, Novi Sad, Sukhumi).
+
+Natural Earth's `TIMEZONE` is sometimes empty, stale or wrong (Macau is filed under `America/Fortaleza`): renamed zones are mapped to their IANA names (`Asia/Rangoon` → `Asia/Yangon`, `Europe/Kiev` → `Europe/Kyiv`...), and a missing zone, or one the country does not have in `facts.json`, becomes the country's zone when it has exactly one; a wrong zone in a multi-zone country is kept as the source has it.
+
+### When
+
+On demand. The output is **committed** (`public/data/cities.json`, about 225 KB). Natural Earth releases are rare (5.x in 2022–2024); re-run when a new release lands or a capital changes, and commit. `CITIES_FRESH=1 npm run cities` re-downloads the source (`$env:CITIES_FRESH = "1"; npm run cities` on PowerShell).
+
+### Output
+
+`public/data/cities.json`:
+
+```json
+{
+  "built": "2026-10-16",
+  "source": "Natural Earth 1:10m Populated Places (public domain)",
+  "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_populated_places.geojson",
+  "countries": {
+    "MX": [
+      { "id": "mx-mexico-city", "name": { "es": "Ciudad de México", "en": "Mexico City" },
+        "ll": [19.444, -99.133], "pop": 19028000, "capital": true,
+        "admin1": "Distrito Federal", "tz": "America/Mexico_City", "qid": "Q1489" },
+      { "id": "mx-guadalajara", "name": { "es": "Guadalajara", "en": "Guadalajara" },
+        "ll": [20.672, -103.332], "pop": 4198000, "capital": false,
+        "admin1": "Jalisco", "tz": "America/Mexico_City", "qid": "Q9022" }
+    ]
+  }
+}
+```
+
+- `id` is the **slug**: the country's `iso2` in lowercase, a hyphen, then the English name (`NAME_EN`, falling back to `NAME`) with accents stripped (NFD, combining marks removed; ß → ss, ø → o, æ → ae, đ → d, ł → l, apostrophes dropped), lowercased, every run of other characters replaced by one hyphen, hyphens trimmed: `São Paulo` → `br-sao-paulo`, `Kōbe` → `jp-kobe`, `Ciudad Nezahualcóyotl` → `mx-ciudad-nezahualcoyotl`. If two places in one country slug the same, the second gets `-2`. The slug is stable across runs as long as the English name does not change; it is meant for the URL hash and for linking other datasets.
+- `name.es` is `NAME_ES`, `name.en` is `NAME_EN`, both falling back to `NAME`. Natural Earth copies the English name into `NAME_ES` when it has no Spanish exonym, so `es` equals `en` for most places and differs where Spanish has a name (`Tokio`, `Marsella`, `Burdeos`, `Argel`, `Kioto`).
+- `ll` is `[lat, lon]` rounded to 3 decimals (about 100 m), from `LATITUDE`/`LONGITUDE` (the geometry when those are missing).
+- `pop` is `POP_MAX`, Natural Earth's estimate of the urban agglomeration (it can be the metro area, so Osaka reads 11.3 million), or `null` when 0. Say "Natural Earth estimate", never "the population of the city".
+- `capital` is `true` on the capital rows as decided above. Eswatini has two (Mbabane and Lobamba, both named in `facts.json`). A country can have none: AQ, YT, MP, TK, VI, EH, where Natural Earth has no point with the capital's name (Dzaoudzi is there but Mamoudzou is not; Capitol Hill but not Saipan).
+- `admin1` is `ADM1NAME` (state, province, region, as Natural Earth spells it, so `"Distrito Federal"` for CDMX), `null` when missing; `tz` is the IANA zone or `null`; `qid` is the Wikidata id (`Q…`) or `null` (4 rows). Link `https://www.wikidata.org/wiki/<qid>` for the source; a Wikipedia article can be found from it.
+- The file is kept under 250 KB: the script drops `admin1` from every row first, then `tz`, then lowers the per-country cap, and stops as soon as it fits (today nothing was dropped).
+
+Counts on 2026-10-16: 228 of 250 countries have at least one place, 1,353 places, 223 capital rows; 10 countries have 12, 125 have 8, 93 have fewer. 22 countries have none, all small territories Natural Earth has no point for: AI BV IO VG BQ CX CC TF GG HM JE MS NR NF PN BL SH MF PM SX UM WF. The card must cope with a missing country and with a list without a capital.
+
+### Run locally
+
+```sh
+npm run cities                  # downloads 19 MB once into data/cache/ne/, then a few seconds
+CITIES_FRESH=1 npm run cities   # re-download the source
+```
+
+Check the console summary (unmatched codes, countries with none, countries without a capital row), open `public/data/cities.json` and look at `MX`, `JP` and `FR`: the capital first with `capital: true`, Spanish exonyms where they exist, populations in the right order. Commit the file.

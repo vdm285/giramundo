@@ -136,9 +136,33 @@ function shape(s) {
   return row;
 }
 
-function select(rows) {
+// Local culture first: talk, news, public and regional stations in one of the
+// country's own languages rank above global pop, and English-language music
+// stations are demoted outside anglophone countries. Votes break ties.
+const LOCAL_TAGS = /\b(news|noticias|talk|hablad|informa|public|p[uú]blic|cultur|folk|tradicion|regional|community|comunitari|ind[ií]gena|local|rural|educa|universi|estatal|nacional|national|tango|cumbia|ranchera|norte|banda|mariachi|salsa|samba|forr[oó]|sertanejo|fado|flamenco|rebetiko|chanson|schlager|volksmusik|enka|bhajan|qawwali|afrobeat|highlife|soukous|reggae|bachata|merengue|vallenato|andina|andean)/i;
+const GLOBAL_TAGS = /\b(pop|hits|top ?40|dance|edm|electronic|house|techno|trance|anime|jpop|kpop|k-pop|j-pop|rock|metal|hip ?hop|rap|rnb|r&b|urban|lounge|chillout|oldies|80s|90s|classic rock|english)/i;
+const ENGLISH = new Set(['US', 'GB', 'IE', 'AU', 'NZ', 'CA', 'JM', 'TT', 'BB', 'BS', 'BZ', 'GY', 'ZA', 'NG', 'GH', 'KE', 'UG', 'TZ', 'ZM', 'ZW', 'LR', 'SL', 'GM', 'MW', 'BW', 'NA', 'PH', 'SG', 'IN', 'PK', 'FJ', 'PG', 'MT']);
+const LANG_NAMES = { spa: ['spanish', 'español', 'espanol', 'castellano'], eng: ['english', 'inglés'], fra: ['french', 'français', 'francais'], por: ['portuguese', 'português', 'portugues'], deu: ['german', 'deutsch'], ita: ['italian', 'italiano'], jpn: ['japanese', '日本語'], kor: ['korean', '한국어'], zho: ['chinese', 'mandarin', '中文'], ara: ['arabic', 'العربية'], rus: ['russian', 'русский'], hin: ['hindi'], tur: ['turkish', 'türkçe'], nld: ['dutch', 'nederlands'], pol: ['polish', 'polski'], ell: ['greek'], heb: ['hebrew'], fas: ['persian', 'farsi'], tha: ['thai'], vie: ['vietnamese'], ind: ['indonesian', 'bahasa'], msa: ['malay'], swa: ['swahili'], ukr: ['ukrainian'], ces: ['czech'], hun: ['hungarian'], ron: ['romanian'], swe: ['swedish'], nor: ['norwegian'], dan: ['danish'], fin: ['finnish'], cat: ['catalan'], eus: ['basque'], glg: ['galician'], que: ['quechua'], grn: ['guaraní', 'guarani'], nah: ['náhuatl', 'nahuatl'] };
+
+function localScore(s, country) {
+  // Raw directory rows: tags is a comma string, language a free-text field.
+  const tags = String(s.tags || '').toLowerCase();
+  const lang = String(s.language || s.lang || '').toLowerCase();
+  const own = (country?.languages || []).flatMap((code) => LANG_NAMES[code] || []);
+  let score = 0;
+  if (LOCAL_TAGS.test(tags)) score += 3;
+  if (GLOBAL_TAGS.test(tags)) score -= 3;
+  if (lang && own.some((n) => lang.includes(n))) score += 2;
+  if (lang.includes('english') && !ENGLISH.has(country?.iso2) && !own.includes('english')) score -= 2;
+  if (!lang) score -= 1;
+  if (/\b(quran|christian|gospel|religio|worship|church)\b/i.test(tags)) score -= 1;
+  return score;
+}
+
+function select(rows, country) {
   const ok = rows.filter(playable);
-  ok.sort((a, b) => (b.votes - a.votes) || (b.clickcount - a.clickcount));
+  ok.sort((a, b) => (localScore(b, country) - localScore(a, country)) || (b.votes - a.votes) || (b.clickcount - a.clickcount));
+  if (process.env.RADIO_DEBUG === country?.iso2) for (const s of ok.slice(0, 12)) console.log(localScore(s, country), s.votes, s.name.slice(0, 30), '|', s.language, '|', String(s.tags).slice(0, 60));
   const codecOf = (s) => norm(s.codec).toUpperCase();
   const native = ok.filter((s) => !isHls(s) && NATIVE_CODECS.has(codecOf(s)));
   // Stations whose codec the directory has not identified rank after the known
@@ -210,7 +234,7 @@ await pool(countries, CONCURRENCY, async (c) => {
     const rows = await fetchStations(server, c.iso2);
     raw += rows.length;
     for (const s of rows) codecs.set(norm(s.codec).toUpperCase() || '(none)', (codecs.get(norm(s.codec).toUpperCase() || '(none)') || 0) + 1);
-    out.countries[c.iso2] = select(rows);
+    out.countries[c.iso2] = select(rows, c);
   } catch (err) {
     out.countries[c.iso2] = [];
     errors[c.iso2] = String(err.message || err).slice(0, 200);

@@ -68,6 +68,10 @@ Phases are built in order. Each ends with a deploy and a check-in.
 - Flights overhead (OpenSky snapshot).
 - Cities as a second level of tap.
 - Travel: flights and stays with approximate costs for a country the reader falls for.
+- Video "cinema mode": when a walking tour plays, widen the player and put place context around it instead of a small frame. Parked until the dossier layout settles.
+- Food: recipe links per dish (video recipes, ingredient notes), and, with the reader's permission for location, restaurants nearby that serve that cuisine. The restaurant idea needs a source that is free and honest; parked.
+- Radio: AI subtitles or live translation; a "talk only" filter if the reader wants speech, not music.
+- Performance: a true lightweight mode that still shows the features (flat map, no clouds or relief, smaller plates, deferred data). The first paint should not wait for places, radio or indicators.
 - Phone layout polish; VR.
 - **The long horizon, in a footnote.** Giramundo is the Earth level of a larger family Victor imagines: zoom out to the solar system, the Milky Way and galaxy clusters (NASA imagery, astronomy); zoom in from Earth to a city, to a person, to organs, tissues, cells, molecules, atoms, particles. Each level would be its own repository with its own focus, linked to its neighbors by a deliberate "step up / step down" control, never by an accidental scroll. Modular by design, so one level can be world-class without waiting for the others. Giramundo should stay the best Earth level it can be; the only thing it owes that future is clean interfaces and good docs.
 

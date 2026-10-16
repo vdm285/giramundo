@@ -455,6 +455,13 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
   let day8k = null;
   let want8k = false;
   let loading8k = false;
+  // A 90 KB plate first so the Earth has color within the first second,
+  // then the 4k plate replaces it.
+  loadTexture(`${T}earth-day-1k.jpg`, THREE.SRGBColorSpace).then((tex) => {
+    if (!tex || day4k || day8k) return;
+    uniforms.dayMap.value = tex;
+    uniforms.hasDay.value = 1;
+  });
   loadTexture(`${T}earth-day.jpg`, THREE.SRGBColorSpace).then((tex) => {
     if (!tex) return;
     day4k = tex;
