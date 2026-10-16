@@ -1,86 +1,108 @@
+// Canvas-painted textures the shader reads: a country-id map (which country
+// owns each texel), a border map (anti-aliased outlines), and 1-D palette
+// textures (one color per country id, for Atlas and Data views).
+//
+// All equirectangular, longitude 0 at the center, same as the NASA plates.
+// d3-geo's path is used so Russia and Fiji do not paint a stripe across the
+// world where they cross the antimeridian.
+
 import { geoEquirectangular, geoPath } from 'd3-geo';
 import * as THREE from 'three';
 
-const W = 2048;
-const H = 1024;
-const projection = geoEquirectangular().scale(W / (2 * Math.PI)).translate([W / 2, H / 2]);
+export const W = 4096;
+export const H = 2048;
+export const projection = geoEquirectangular().scale(W / (2 * Math.PI)).translate([W / 2, H / 2]);
 
-function paintFeature(ctx, feature) {
-  ctx.beginPath();
-  geoPath(projection, ctx)(feature);
+function canvas() {
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  return c;
 }
 
-export function createPainter(features) {
-  const atlas = document.createElement('canvas');
-  atlas.width = W;
-  atlas.height = H;
-  const borders = document.createElement('canvas');
-  borders.width = W;
-  borders.height = H;
-  const mask = document.createElement('canvas');
-  mask.width = W;
-  mask.height = H;
-  const actx = atlas.getContext('2d');
-  const bctx = borders.getContext('2d');
-  const mctx = mask.getContext('2d');
+// Assign every feature a small integer id (1..n). 0 means ocean / no country.
+export function assignIds(features) {
+  features.forEach((feature, i) => { feature.properties.id = i + 1; });
+  return features.length + 1;
+}
 
-  actx.fillStyle = '#c5d7e2';
-  actx.fillRect(0, 0, W, H);
+export function paintIdMap(features) {
+  const c = canvas();
+  const ctx = c.getContext('2d', { willReadFrequently: false });
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  const path = geoPath(projection, ctx);
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 1.3;
   for (const feature of features) {
-    actx.fillStyle = feature.properties.fill || '#e6d7c3';
-    paintFeature(actx, feature);
-    actx.fill();
+    const id = feature.properties.id;
+    const color = `rgb(${id & 255}, ${(id >> 8) & 255}, 0)`;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    path(feature);
+    ctx.fill();
+    // Stroke in the same color so the anti-aliased fringe does not decode
+    // to a neighbor's id. Edges move by under a texel.
+    ctx.stroke();
   }
-  actx.save();
-  actx.strokeStyle = 'rgba(36, 48, 58, 0.16)';
-  actx.lineWidth = 1;
-  actx.beginPath();
-  for (let lon = -150; lon <= 150; lon += 30) {
-    geoPath(projection, actx)({ type: 'LineString', coordinates: [[lon, -80], [lon, 80]] });
-  }
-  for (let lat = -60; lat <= 60; lat += 30) {
-    geoPath(projection, actx)({ type: 'LineString', coordinates: [[-180, lat], [180, lat]] });
-  }
-  actx.stroke();
-  actx.restore();
-  actx.strokeStyle = 'rgba(48, 36, 28, 0.72)';
-  actx.lineWidth = 1.15;
-  for (const feature of features) {
-    paintFeature(actx, feature);
-    actx.stroke();
-  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return { canvas: c, tex };
+}
 
-  bctx.strokeStyle = '#0000ff';
-  bctx.lineWidth = 1.4;
-  bctx.lineJoin = 'round';
-  for (const feature of features) {
-    paintFeature(bctx, feature);
-    bctx.stroke();
-  }
+export function paintBorders(features) {
+  const c = canvas();
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  const path = geoPath(projection, ctx);
+  ctx.strokeStyle = 'rgba(255,255,255,1)';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const feature of features) path(feature);
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.anisotropy = 8;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return { canvas: c, tex };
+}
 
-  const atlasTex = new THREE.CanvasTexture(atlas);
-  atlasTex.colorSpace = THREE.SRGBColorSpace;
-  atlasTex.anisotropy = 8;
-  const maskTex = new THREE.CanvasTexture(mask);
-  maskTex.colorSpace = THREE.LinearSRGBColorSpace;
-  maskTex.anisotropy = 4;
+// A palette is a (size x 1) RGBA texture. RGB is the country color in sRGB
+// bytes; A is 255 when the country has data (Data view hatches the rest).
+export function createPalette(size) {
+  const data = new Uint8Array(size * 4);
+  const tex = new THREE.DataTexture(data, size, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return {
+    tex,
+    size,
+    set(id, rgb, hasData = true) {
+      const i = id * 4;
+      data[i] = rgb[0];
+      data[i + 1] = rgb[1];
+      data[i + 2] = rgb[2];
+      data[i + 3] = hasData ? 255 : 0;
+    },
+    clear(rgb = [60, 64, 70]) {
+      for (let id = 0; id < size; id++) this.set(id, rgb, false);
+    },
+    commit() { tex.needsUpdate = true; },
+  };
+}
 
-  function redraw(selected, hover) {
-    mctx.clearRect(0, 0, W, H);
-    if (hover && hover !== selected) {
-      mctx.fillStyle = '#00ff00';
-      paintFeature(mctx, hover);
-      mctx.fill();
-    }
-    if (selected) {
-      mctx.fillStyle = '#ff0000';
-      paintFeature(mctx, selected);
-      mctx.fill();
-    }
-    mctx.drawImage(borders, 0, 0);
-    maskTex.needsUpdate = true;
-  }
-
-  redraw(null, null);
-  return { atlasTex, maskTex, redraw };
+export function hexToRgb(hex) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }

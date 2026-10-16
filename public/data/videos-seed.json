@@ -1,0 +1,430 @@
+{
+  "built": "2026-10-16",
+  "source": "YouTube. Hand-curated video IDs, each verified through the YouTube oEmbed endpoint on the build date. Titles and channel names are a snapshot; the site re-reads them through oEmbed at view time.",
+  "countries": {
+    "MX": [
+      {
+        "id": "fVh9YNTzhak",
+        "kind": "walk",
+        "place": "Mexico City",
+        "channel": "HP Walking Tours",
+        "title": "Mexico City 4K Walking Tour - 190 min Tour with Captions & Immersive Sound [4K Ultra HD/60fps]",
+        "query": "Mexico City walking tour 4K"
+      },
+      {
+        "id": "xjR0q-yUsYY",
+        "kind": "walk",
+        "place": "Mexico City",
+        "channel": "World Walking Tours",
+        "title": "Mexico City 4K - Walking Tour - CDMX 🇲🇽",
+        "query": "Mexico City walking tour 4K"
+      },
+      {
+        "id": "OO9kSxcT9Rg",
+        "kind": "food",
+        "place": "Mexico City",
+        "channel": "Mark Wiens",
+        "title": "The Ultimate MEXICAN STREET FOOD TACOS Tour of Mexico City! (ft. La Ruta de la Garnacha)",
+        "query": "Mexico City street food"
+      }
+    ],
+    "JP": [
+      {
+        "id": "gHfe1xTpomE",
+        "kind": "walk",
+        "place": "Tokyo",
+        "channel": "Rambalac",
+        "title": "Tokyo walk from day to rainy night",
+        "query": "Tokyo walk 4K"
+      },
+      {
+        "id": "6qGiXY1SB68",
+        "kind": "walk",
+        "place": "Tokyo",
+        "channel": "Rambalac",
+        "title": "Night Shibuya",
+        "query": "Tokyo walk 4K"
+      },
+      {
+        "id": "DPnpgHuh8Qc",
+        "kind": "food",
+        "place": "Tokyo",
+        "channel": "TabiEats",
+        "title": "Tokyo Street Food You Won’t Find in Guidebooks",
+        "query": "Tokyo street food"
+      },
+      {
+        "id": "D48T0wNm96w",
+        "kind": "drone",
+        "place": "Japan",
+        "channel": "Scenic Relaxation",
+        "title": "Japan 4K - Scenic Relaxation Film With Calming Music",
+        "query": "Japan drone 4K"
+      }
+    ],
+    "US": [
+      {
+        "id": "-IpXdtWfneI",
+        "kind": "walk",
+        "place": "New York City",
+        "channel": "BookingHunterTV",
+        "title": "New York City Walking Tour Part 1 - Midtown Manhattan (4k Ultra HD 60fps) – With Captions",
+        "query": "New York City walking tour 4K"
+      },
+      {
+        "id": "1aedKShR1rA",
+        "kind": "walk",
+        "place": "New York City",
+        "channel": "WALKS and the CITY",
+        "title": "Manhattan Evening Walk - New York Walking Tour 4k",
+        "query": "New York City walking tour 4K"
+      },
+      {
+        "id": "CE6Y8tqhO4A",
+        "kind": "food",
+        "place": "New York City",
+        "channel": "National Geographic",
+        "title": "New York City's Most Iconic Foods in 24 Hours | Epic Food Journeys with Mark Wiens | Nat Geo",
+        "query": "New York street food"
+      }
+    ],
+    "ES": [
+      {
+        "id": "AsuDyA2GZFc",
+        "kind": "walk",
+        "place": "Madrid",
+        "channel": "HP Walking Tours",
+        "title": "Madrid 4K Walking Tour (Spain) - 3h Tour with Captions & Immersive Sound [4K Ultra HD/60fps]",
+        "query": "Madrid walking tour 4K"
+      },
+      {
+        "id": "kdh_7FWM_eg",
+        "kind": "walk",
+        "place": "Madrid",
+        "channel": "BookingHunterTV",
+        "title": "Madrid, Spain 🇪🇸 The Grand Summer Walk 2025 - 4K 60fps Full City Tour ​[Binaural ASMR]",
+        "query": "Madrid walking tour 4K"
+      },
+      {
+        "id": "YGAsG6_JgAI",
+        "kind": "drone",
+        "place": "Spain",
+        "channel": "Scenic Relaxation",
+        "title": "Spain 4K - Scenic Relaxation Film With Calming Music",
+        "query": "Spain drone 4K"
+      }
+    ],
+    "FR": [
+      {
+        "id": "oz1Mgu8e1N4",
+        "kind": "walk",
+        "place": "Paris",
+        "channel": "Prowalk Tours",
+        "title": "PARIS Walking Tour - 4K - With Captions!",
+        "query": "Paris walking tour 4K"
+      },
+      {
+        "id": "6BPuGeS6O4w",
+        "kind": "walk",
+        "place": "Paris",
+        "channel": "HP Walking Tours",
+        "title": "PARIS WALKING TOUR — France Evening Tour with Captions [4K/60fps]",
+        "query": "Paris walking tour 4K"
+      },
+      {
+        "id": "k0B7Va-te44",
+        "kind": "food",
+        "place": "Paris",
+        "channel": "Mark Wiens",
+        "title": "Paris Street Food!! 10 CHEAP EATS You Can't Miss!!",
+        "query": "Paris street food"
+      }
+    ],
+    "IT": [
+      {
+        "id": "uOJkVLwnCNI",
+        "kind": "walk",
+        "place": "Rome",
+        "channel": "Prowalk Tours",
+        "title": "Rome, Italy Walking Tour - 4K60fps with Captions - Prowalk Tours",
+        "query": "Rome walking tour 4K"
+      },
+      {
+        "id": "cH1E97JIyUo",
+        "kind": "walk",
+        "place": "Rome",
+        "channel": "HP Walking Tours",
+        "title": "Rome 4K Walking Tour - With Captions [4K/60fps]",
+        "query": "Rome walking tour 4K"
+      },
+      {
+        "id": "1B5ZcslWEYo",
+        "kind": "food",
+        "place": "Rome",
+        "channel": "Strictly Dumpling",
+        "title": "24 Hour ITALIAN STREET FOOD Tour in Rome Italy |  BEST EATS & Hidden Local Gems",
+        "query": "Rome street food"
+      }
+    ],
+    "BR": [
+      {
+        "id": "m4pT1j2-c-s",
+        "kind": "walk",
+        "place": "Rio de Janeiro",
+        "channel": "Prowalk Tours",
+        "title": "Rio de Janeiro Walking Tour - 4K60fps with Captions - Prowalk Tours Brazil",
+        "query": "Rio de Janeiro walking tour 4K"
+      },
+      {
+        "id": "8SOK2eg3bTU",
+        "kind": "walk",
+        "place": "Rio de Janeiro",
+        "channel": "Narramundos",
+        "title": "Walking Along the Ipanema Beachfront — Rio de Janeiro, Brazil 【4K】2024 🇧🇷",
+        "query": "Rio de Janeiro walking tour 4K"
+      },
+      {
+        "id": "qqJws-fmGsk",
+        "kind": "drone",
+        "place": "Brazil",
+        "channel": "Scenic Relaxation",
+        "title": "Brazil 4K - Scenic Relaxation Film",
+        "query": "Brazil drone 4K"
+      }
+    ],
+    "AR": [
+      {
+        "id": "O_xXKUQVu2Q",
+        "kind": "walk",
+        "place": "Buenos Aires",
+        "channel": "BLA BLA WALKER 🐧 Tokyo Walking Tour",
+        "title": "[4K] Buenos Aires, Argentina 🇦🇷🐧 Nonstop Walking Tour",
+        "query": "Buenos Aires walking tour 4K"
+      },
+      {
+        "id": "Pafh8WxKPrU",
+        "kind": "walk",
+        "place": "Buenos Aires",
+        "channel": "One Man Wolf Pack",
+        "title": "【4K 60fps】🇦🇷 VIRTUAL WALKING TOUR: 🚶 «Buenos Aires - Argentina 2022» 🎧 ORIGINAL SOUNDS 🚫 NO COMMENT",
+        "query": "Buenos Aires walking tour 4K"
+      },
+      {
+        "id": "N_T93jrpaSE",
+        "kind": "food",
+        "place": "Buenos Aires",
+        "channel": "Luisito Comunica",
+        "title": "Probando COMIDA CALLEJERA en Argentina 🥟🇦🇷",
+        "query": "Buenos Aires street food"
+      }
+    ],
+    "DE": [
+      {
+        "id": "zca688Ecwpk",
+        "kind": "walk",
+        "place": "Berlin",
+        "channel": "4K Urban Life",
+        "title": "Trip around Berlin, Germany in 4K 60fps - Virtual Walking Tour with Original City Sounds",
+        "query": "Berlin walking tour 4K"
+      },
+      {
+        "id": "cv38DPCSUNs",
+        "kind": "walk",
+        "place": "Berlin",
+        "channel": "BookingHunterTV",
+        "title": "Berlin 2023, Germany Walking Tour (4k Ultra HD 60 fps) - With Captions",
+        "query": "Berlin walking tour 4K"
+      },
+      {
+        "id": "li-_BLtq58w",
+        "kind": "drone",
+        "place": "Germany",
+        "channel": "Scenic Relaxation",
+        "title": "Germany 4K - Scenic Relaxation Film With Calming Music",
+        "query": "Germany drone 4K"
+      }
+    ],
+    "GB": [
+      {
+        "id": "8WlUiln-VeY",
+        "kind": "walk",
+        "place": "London",
+        "channel": "HP Walking Tours",
+        "title": "LONDON 4K Walking Tour (UK) - 4h+ Tour with Captions & Immersive Sound [4K Ultra HD/60fps]",
+        "query": "London walking tour 4K"
+      },
+      {
+        "id": "GEDcNpVs_VM",
+        "kind": "walk",
+        "place": "London",
+        "channel": "Watched Walker",
+        "title": "A Rainy October Day in London ☔️ Westminster to Belgravia Walk 2026 | 4K HDR",
+        "query": "London walking tour 4K"
+      },
+      {
+        "id": "8frIFTQJg1c",
+        "kind": "food",
+        "place": "London",
+        "channel": "Mark Wiens",
+        "title": "Best London Street Food at Borough Market (1,000 Years Old!!)",
+        "query": "London street food"
+      }
+    ],
+    "KR": [
+      {
+        "id": "D-F4L5Gfhik",
+        "kind": "walk",
+        "place": "Seoul",
+        "channel": "Seoul Walker",
+        "title": "Walking from Myeongdong to Dongdaemun on a summer night | Walking Tour Seoul 4K HDR",
+        "query": "Seoul walking tour 4K"
+      },
+      {
+        "id": "ca9uN3QyDmQ",
+        "kind": "walk",
+        "place": "Seoul",
+        "channel": "World Wanderings: 4K Walking Tours",
+        "title": "[4K] Seoul Nightlife Walking Tour - BEST Street Food, Night Markets, and Party Districts.",
+        "query": "Seoul walking tour 4K"
+      },
+      {
+        "id": "zPuLGkluoTY",
+        "kind": "food",
+        "place": "Seoul",
+        "channel": "Doobydobap",
+        "title": "Eating the BEST KOREAN STREET FOOD in SEOUL",
+        "query": "Seoul street food"
+      }
+    ],
+    "TH": [
+      {
+        "id": "3CRJWy5zXvg",
+        "kind": "walk",
+        "place": "Bangkok",
+        "channel": "HP Walking Tours",
+        "title": "BANGKOK, Thailand 4K Walking Tour - Captions & Immersive Sound [4K Ultra HD/60fps]",
+        "query": "Bangkok walking tour 4K"
+      },
+      {
+        "id": "mWYb_h0dgSU",
+        "kind": "walk",
+        "place": "Bangkok",
+        "channel": "LADmob",
+        "title": "Bangkok Day Walking Tour in 4K HDR Thailand | Walking from Asok Station to Siam Square",
+        "query": "Bangkok walking tour 4K"
+      },
+      {
+        "id": "jJyJDKQjzSM",
+        "kind": "food",
+        "place": "Bangkok",
+        "channel": "STREET FOOD KING ",
+        "title": "BEST THAI STREET FOOD Compilation | Bangkok Thailand",
+        "query": "Bangkok street food"
+      }
+    ],
+    "EG": [
+      {
+        "id": "YVYDz_coSfY",
+        "kind": "walk",
+        "place": "Cairo",
+        "channel": "Prowalk Tours",
+        "title": "Cairo's Khan el-Khalili Walking Tour (4K/60fps)",
+        "query": "Cairo walking tour 4K"
+      },
+      {
+        "id": "hTN8T-OAtAU",
+        "kind": "walk",
+        "place": "Cairo",
+        "channel": "World Wanderings: 4K Walking Tours",
+        "title": "🇪🇬 Cairo, Egypt Walking Tour - Downtown Cairo Walking Tour - 4K HDR 60fps",
+        "query": "Cairo walking tour 4K"
+      },
+      {
+        "id": "EBsnEiDTqEQ",
+        "kind": "drone",
+        "place": "Egypt",
+        "channel": "Scenic Relaxation",
+        "title": "Egypt 4K - Scenic Relaxation Film With Calming Music",
+        "query": "Egypt drone 4K"
+      }
+    ],
+    "MA": [
+      {
+        "id": "cYEW3sjXZhY",
+        "kind": "walk",
+        "place": "Marrakesh",
+        "channel": "LADmob",
+        "title": "Marrakech Walk — Morocco Walking Tour 4K 60FPS HDR",
+        "query": "Marrakech walking tour 4K"
+      },
+      {
+        "id": "aqpdzId44GM",
+        "kind": "walk",
+        "place": "Marrakesh",
+        "channel": "Walk The Tour",
+        "title": "MARRAKECH Walking Tour 🇲🇦🌴 | Stroll Medina , Souks & Moroccan Charm!",
+        "query": "Marrakech walking tour 4K"
+      },
+      {
+        "id": "mNqNF0iiWR0",
+        "kind": "food",
+        "place": "Marrakesh",
+        "channel": "Mark Wiens",
+        "title": "$1.49 Morocco Fast Food - SANDWICH KING!! 🥙 Marrakesh Street Food Tour!",
+        "query": "Marrakech street food"
+      }
+    ],
+    "IN": [
+      {
+        "id": "HgFU4x_aC-8",
+        "kind": "walk",
+        "place": "New Delhi",
+        "channel": "Through Streets & Tastes",
+        "title": "🇮🇳 New Delhi, India: Streets Tourists Rarely See | 4K Walking Tour",
+        "query": "Delhi walking tour 4K"
+      },
+      {
+        "id": "IiW8181-Dbo",
+        "kind": "walk",
+        "place": "New Delhi",
+        "channel": "Walking in India",
+        "title": "This is New Delhi 2025 🇮🇳 - Walking Tour of Real India in 4K",
+        "query": "Delhi walking tour 4K"
+      },
+      {
+        "id": "qc7iiJE027o",
+        "kind": "food",
+        "place": "Old Delhi",
+        "channel": "Mark Wiens",
+        "title": "Best Indian Street Food in Old Delhi!! (Sells Out in 30 Minutes)",
+        "query": "Delhi street food"
+      }
+    ],
+    "TR": [
+      {
+        "id": "npTBK0VmhxI",
+        "kind": "walk",
+        "place": "Istanbul",
+        "channel": "HP Walking Tours",
+        "title": "Istanbul, TURKEY 4K Walking Tour - Captions & Immersive Sound [4K Ultra HD/60fps]",
+        "query": "Istanbul walking tour 4K"
+      },
+      {
+        "id": "Tv5MwK_9RDk",
+        "kind": "walk",
+        "place": "Istanbul",
+        "channel": "Walking OZ",
+        "title": "ISTANBUL, Turkey 🇹🇷 Two Continents, One City | 4K Walking Tour",
+        "query": "Istanbul walking tour 4K"
+      },
+      {
+        "id": "qNwMZ8Sdon8",
+        "kind": "food",
+        "place": "Istanbul",
+        "channel": "National Geographic",
+        "title": "Ultimate Istanbul Food Tour: Best Turkish Street Food | Epic Food Journeys with Mark Wiens | Nat Geo",
+        "query": "Istanbul street food"
+      }
+    ]
+  }
+}

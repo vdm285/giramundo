@@ -1,4 +1,8 @@
-const CACHE = 'giramundo-v1';
+// Offline shell. Network first for the page, the code and the JSON (so a
+// deploy and fresh headlines show up at once); cache first for the heavy,
+// immutable assets (textures, fonts, flags). Only same-origin requests.
+const CACHE = 'giramundo-v2';
+const HEAVY = /\/(textures|flags|assets)\/|\.(woff2?|png|jpg|svg)$/;
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -20,11 +24,22 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
-    const cached = await cache.match(request);
-    const fresh = fetch(request).then((response) => {
+    if (HEAVY.test(url.pathname)) {
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
       if (response.ok) cache.put(request, response.clone());
       return response;
-    }).catch(() => cached);
-    return cached || fresh;
+    }
+    try {
+      const response = await fetch(request);
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    } catch {
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      if (request.mode === 'navigate') return cache.match('./') || Response.error();
+      return Response.error();
+    }
   })());
 });

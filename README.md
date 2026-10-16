@@ -1,10 +1,12 @@
-# Globo Curioso
+# Giramundo
 
-A globe you can spin. Tap any country, even if you do not know its name, and read where it sits, what people eat, and what Wikipedia says. There is a kid mode, a “where is it?” game, and tours. No account. No ads.
+Spin the Earth. Tap a country. See it, know it, and feel what is happening there right now: headlines, weather, local time, history, food, culture, World Heritage sites with photos, walking-tour videos, Street View, and forty years of data. Spanish first, English one click away. Free, no account, no ads, no server.
 
-Spanish is the language it opens in. The EN button switches the interface and the articles.
+Live: https://vdm285.github.io/giramundo/
 
-## Try it
+The product vision and roadmap are in [`docs/VISION.md`](docs/VISION.md). How the data is collected is in [`docs/PIPELINES.md`](docs/PIPELINES.md). The state of the code is in [`HANDOFF.md`](HANDOFF.md). Rules for the words on a card are in [`docs/EDITORIAL.md`](docs/EDITORIAL.md).
+
+## Run it
 
 ```bash
 npm install
@@ -12,39 +14,32 @@ npm test
 npm run dev
 ```
 
-Open http://localhost:5173 . On a phone, use the address Vite prints under Network.
+Open http://localhost:5173. For headlines locally, run `npm run news` once (it takes about two minutes and writes files that are not committed).
 
-The static build is `npm run build`. GitHub Pages publishes `main` to `https://vdm285.github.io/giramundo/`.
+`npm run build` makes the static site in `dist/`. GitHub Pages publishes `main`, on every push and on a schedule every six hours so the headlines stay fresh.
 
-## What a tap shows
+## What is where
 
-- **Facts**, immediately: capital, population (World Bank year when we have one), area, languages, currency, local time, neighbors.
-- **Historia, Comida, Cultura**: the Wikipedia introduction, in Spanish or English, with a link back. The texts are CC BY-SA. About 240 countries have a Spanish history extract vendored in `public/data/wiki/`. If a file is missing, the page asks Wikipedia directly.
-- **Viajes**: a latitude hint, plus OpenStreetMap, Google Maps and Google Earth. It does not invent a list of sights.
-- **Hoy**: Wikipedia’s “on this day” and the day’s news, live. Lines that mention the country come first. Kid mode drops lines about violence.
+- `src/globe/`: the Three.js globe. `scene.js` builds the scene, `camera.js` handles drag, zoom and flights, `shaders.js` is the GLSL, `paint.js` paints the country-id and border textures.
+- `src/flat/map.js`: the flat equirectangular map, drawn with Canvas 2D. Same picking, same dossier.
+- `src/app/`: the controller (`app.js`), the store, the hash router, the strings.
+- `src/dossier/`: the country panel and its seven sections.
+- `src/live/sources.js`: every live source the browser calls, and the deploy-time files it reads.
+- `src/data/`: loading and shaping the country data; `src/geo/`: sphere math, picking, oceans.
+- `tools/`: build scripts for facts, Wikipedia extracts, World Bank indicators, headlines, places and videos.
+- `public/data/`: the vendored data. `public/textures/`: NASA plates and the cloud and relief maps.
+- `tests/`: `npm test`. The geo tests are the spec for the sphere frame; do not weaken them.
 
-The light on the Earth is the real sun. Atlas mode is the paper globe. Disputed borders are named in the card. The map is Natural Earth at 1:50 million, so small countries such as Singapore and Malta are shapes you can tap. A handful of rocks and tiny territories are still a dot.
+## Data and credits
 
-Every country in the dataset has a history paragraph in Spanish and in English, taken from Wikipedia. Food is filled for 241 of 250 and culture for 244 of 250. Where Spanish has no food article, the card uses the English one and says so. Where nobody lives and nobody wrote an article, the card says that instead of inventing a cuisine.
+- Country shapes: Natural Earth 1:50m (public domain) via `world-atlas`.
+- Earth plates: NASA Visible Earth, Blue Marble and Black Marble (public domain). Clouds and relief from NASA plates.
+- Facts: `mledoze/countries`, `dr5hn/countries-states-cities-database`, and the World Bank (`SP.POP.TOTL`, CC BY 4.0).
+- Indicators and population history: World Bank, World Development Indicators (CC BY 4.0).
+- Paragraphs: Wikipedia introductions (CC BY-SA), linked to the article.
+- Places and dishes: Wikidata (CC0). Photos: Wikimedia Commons, each under its own license, linked.
+- Headlines: Google News RSS searches and publisher feeds; headline and link only, each credited to its publisher.
+- Weather: Open-Meteo (CC BY 4.0). Exchange rates: Frankfurter. Holidays: Nager.Date. Earthquakes: USGS.
+- Videos: embedded from YouTube; they belong to their creators.
 
-## Data
-
-`npm run data` rebuilds `public/data/facts.json` and the flags from the cached country files in `data/cache/` (gitignored) plus the World Bank population API.
-
-`npm run stories` refetches Wikipedia intros. It is resumable. Send a proper User-Agent; the script already does. Do not hammer the APIs.
-
-## Tests
-
-`npm test` checks the sphere math (east is right, north is up, a drag follows the finger), that Mexico City falls in Mexico, search nicknames, share links, and that kid mode removes violent “today” lines.
-
-## License
-
-Code: MIT. See `LICENSE`.
-
-Country shapes: Natural Earth, public domain, via `world-atlas`.
-
-Earth photographs: NASA Visible Earth (public domain), the Blue Marble and Black Marble plates redistributed with three-globe’s examples.
-
-Wikipedia extracts: CC BY-SA. Credit the linked article if you reuse one.
-
-Population: World Bank indicator `SP.POP.TOTL`, most recent value, with a fallback dataset where the Bank has no row.
+Code: MIT, see `LICENSE`.

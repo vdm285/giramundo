@@ -3,6 +3,9 @@ name: Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # Every 6 hours: refresh deploy-time data (news headlines) and redeploy.
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +28,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Deploy-time data (public/data/news/, gitignored). A feed outage must never block a deploy.
+      - run: npm run news
+        continue-on-error: true
+      # Video curation needs a YouTube Data API key (free quota). Without the
+      # secret the script copies the committed seed. The cursor sweeps the
+      # countries across daily runs, so cache it between runs.
+      - uses: actions/cache@v4
+        with:
+          path: data/cache/youtube
+          key: youtube-cursor-${{ github.run_id }}
+          restore-keys: youtube-cursor-
+      - run: npm run videos
+        continue-on-error: true
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       - run: npm run build
         env:
           VITE_BASE: /giramundo/
