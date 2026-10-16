@@ -551,6 +551,13 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     setSpin: control.setSpin,
     getFps: () => fps,
     getFpsHistory: () => [...sampleStats],
+    getInfo() {
+      const gl = renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+      return { fps: Math.round(fps), gpu: String(gpu), width: size.x, height: size.y, pixelRatio: renderer.getPixelRatio(), webgl2: renderer.capabilities.isWebGL2 };
+    },
     dispose() {
       running = false;
       control.dispose();

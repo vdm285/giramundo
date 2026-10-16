@@ -560,6 +560,7 @@ function shell(s) {
       <div class="opts">${['auto', 'full', 'simple'].map((q) => html`<button aria-pressed=${s.quality === q} @click=${() => on('quality', q)}>${t(s.lang, `quality${q[0].toUpperCase()}${q.slice(1)}`)}</button>`)}
         <button aria-pressed=${s.flat} @click=${() => on('flat', !s.flat)}>${t(s.lang, 'viewFlat')}</button></div>
       <p class="help">${t(s.lang, 'qualityHelp')}</p>
+      ${s.perf ? html`<p class="help" style="font-variant-numeric:tabular-nums">${t(s.lang, 'perf')}: ${s.perf.fps} fps · ${s.perf.width}×${s.perf.height} @${Number(s.perf.pixelRatio).toFixed(2)} · ${s.perf.gpu}${s.perf.webgl2 === false ? ' · WebGL 1' : ''}</p>` : nothing}
       <h3>${t(s.lang, 'opening')}</h3>
       <div class="opts">${['day', 'home', 'here', 'random', 'last'].map((o) => html`<button aria-pressed=${s.opening === o} @click=${() => on('opening', o)}>${t(s.lang, `open${o[0].toUpperCase()}${o.slice(1)}`)}</button>`)}</div>
       <p class="help">${t(s.lang, 'openingHint')}</p>
@@ -843,6 +844,12 @@ export async function boot() {
   }, 15000);
   setInterval(syncMarkers, 900);
   setInterval(() => { if (store.get().tour?.playing) store.set({ tick: Date.now() }); }, 400);
+  // Performance readout, refreshed only while the settings dialog is open.
+  setInterval(() => {
+    if (!document.getElementById('settings')?.open || !surface) return;
+    const info = surface.getInfo ? surface.getInfo() : { fps: Math.round(surface.getFps()), gpu: 'Canvas 2D', width: innerWidth, height: innerHeight, pixelRatio: devicePixelRatio };
+    store.set({ perf: info });
+  }, 1000);
   watchPerformance();
 
   window.addEventListener('keydown', (event) => {
