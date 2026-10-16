@@ -376,3 +376,82 @@ CITIES_FRESH=1 npm run cities   # re-download the source
 ```
 
 Check the console summary (unmatched codes, countries with none, countries without a capital row), open `public/data/cities.json` and look at `MX`, `JP` and `FR`: the capital first with `capital: true`, Spanish exonyms where they exist, populations in the right order. Commit the file.
+
+## Culture
+
+### What runs
+
+`npm run culture` → `node tools/build-culture.mjs`. Source: the Wikidata Query Service (SPARQL), through the cached `sparql` helper in `tools/net.mjs` (responses land in `data/cache/wikidata/`, keyed by query text). Countries join to `public/data/facts.json` through P297 (ISO 3166-1 alpha-2) exactly as the Places pipeline does; all 250 match. Demonym and cuisine live in `places.json` and are not repeated here.
+
+Per country it collects:
+
+- **Anthem** (P85): the statement that is a national anthem (Q23691) and Preferred when several exist (Mexico also lists its flag salute), skipping ended and deprecated statements. Label es/en (with the `mul` fallback: "Kimigayo"), the es/en Wikipedia article URLs, and **one audio file** from the anthem item's P51, as a Commons file name. When there are several, the script prefers names containing "instrumental", then official-band recordings ("US Navy Band", "Marine Band", "Banda…"), then a format a browser plays (`.ogg`, `.oga`, `.opus`, `.mp3`, `.flac`, `.wav`), and demotes `.mid`. Play it from `https://commons.wikimedia.org/wiki/Special:FilePath/<encodeURIComponent(audio)>` in an `<audio>` element; Chrome and Firefox play Ogg Vorbis, Safari needs a fallback or a note that the file is on Commons.
+- **People**: up to 12 humans (P31 = Q5) whose country of citizenship (P27) is the country, with deprecated and ended citizenships skipped (Kazuo Ishiguro is not listed under Japan; Soviet citizens are not Russians), ranked by sitelinks (how many Wikipedias have an article). Finding "the 40 most-linked citizens" of a big country by `ORDER BY` alone takes ~35 s for the United States, so one range query over everyone with at least 30 sitelinks (`hint:Prior hint:rangeSafe true`, 43,000 rows in a few seconds) fills the big countries, and only the countries that get fewer than 40 candidates from it run their own `ORDER BY DESC(?links) LIMIT 40` query, which is quick because they are small. Candidates are then detailed in batches of 200 (two flat queries each: labels, descriptions, image, dates, birth countries; then occupations). Blazegraph throws a `StackOverflowError` when those OPTIONALs are combined with `GROUP BY` / `GROUP_CONCAT`, so the rows are merged in JS. A country whose query fails keeps an empty list and the run continues.
+  Ranking in JS: people whose recorded birthplace (P19 → P17) is in another country sort after the rest (naturalized citizens stay in but do not lead: Wikidata gives Trotsky, Buñuel and Cortés Mexican citizenship); then by sitelinks. Only people with a photo (P18) are kept when that leaves at least 6; otherwise the ones without fill the list. The occupation shown is the one with Preferred rank when an editor set one, else one the Wikidata description itself names (by word stem, plus a short alias table: "president" implies politician, "filmmaker" film director, "actress" actor), else the person's occupation whose own item has the most sitelinks. SPARQL does not expose statement order, so "the first P106" cannot be read literally.
+- **Languages**: official languages (P37) of the country, skipping ended and deprecated statements, with label es/en, the ISO 639-1 code (P218) when the language has one, and the number of native speakers (P1098 on the language item: the Preferred value, else the most recent point in time, else the largest), rounded to an integer. The count is **global**, not per country: Spanish shows about 485 million under Mexico and under Spain, English 753 million under India. Sorted by speakers.
+
+Labels fall back es ← mul ← en and en ← mul ← es; descriptions es ← en.
+
+WDQS specifics: 1.5 s gap between live queries (429 with Retry-After is honored by `fetchRetry`); the range query pins its join order with `hint:Query hint:optimizer "None"`. A full run from an empty cache is about 265 queries and 10 to 12 minutes; from the cache, seconds.
+
+### Known skew
+
+Sitelinks measure how many Wikipedias write about someone, which favors presidents, footballers and pop singers over scientists, painters and composers: of the 2,617 people kept on 2026-10-16, 1,280 are shown as politicians and 296 as footballers. Small countries' lists are mostly heads of state. Mexico does come out as Frida Kahlo, Octavio Paz, Lila Downs, Salma Hayek, Claudia Sheinbaum, Emiliano Zapata, López Obrador, Benito Juárez, Diego Rivera, Peña Nieto, Anthony Quinn, Porfirio Díaz; Japan as Bashō, Naruhito, Kurosawa, Hokusai, Abe, Hirohito, Akihito, Murakami, Kawabata, Miyazaki, Mishima, Suga. The card should say "the people most Wikipedias write about", not "the most important people". To change the mix, edit `rankPeople` in the script (for example, weight occupations) rather than the output; the tuning notes are at the top of `tools/build-culture.mjs`.
+
+### When
+
+On demand. The output is **committed** (`public/data/culture.json`, about 845 KB, capped at 900 KB: the script shortens descriptions to 100 characters first, then lowers the people cap to 10, then 8, and stops as soon as the file fits; today nothing was cut). Re-run a few times a year, or when a card shows a wrong name, with `rm -r data/cache/wikidata` first to force fresh data, and commit.
+
+### Output
+
+`public/data/culture.json`:
+
+```json
+{
+  "built": "2026-10-16",
+  "source": "Wikidata (CC0), Wikimedia Commons",
+  "attribution": { "data": "…", "images": "…", "text": "…" },
+  "notes": "how each list was built, one line",
+  "countries": {
+    "MX": {
+      "anthem": { "qid": "Q200742",
+                  "label": { "es": "Himno Nacional Mexicano", "en": "National Anthem of Mexico" },
+                  "audio": "Himno Nacional Mexicano instrumental.ogg",
+                  "wiki": { "es": "https://es.wikipedia.org/wiki/Himno_nacional_mexicano", "en": "https://en.wikipedia.org/wiki/Himno_Nacional_Mexicano" } },
+      "people": [
+        { "qid": "Q5588", "label": { "es": "Frida Kahlo", "en": "Frida Kahlo" },
+          "desc": { "es": "pintora y activista mexicana", "en": "Mexican painter (1907–1954)" },
+          "image": "Frida Kahlo, by Guillermo Kahlo (cropped).jpg",
+          "born": 1907, "died": 1954,
+          "job": { "es": "pintor", "en": "painter" } }
+      ],
+      "languages": [
+        { "qid": "Q1321", "label": { "es": "español", "en": "Spanish" }, "code": "es", "speakers": 485000000 },
+        { "qid": "Q13300", "label": { "es": "náhuatl", "en": "Nahuatl" }, "code": null, "speakers": 1925620 }
+      ]
+    }
+  }
+}
+```
+
+`anthem` is `null` when Wikidata has no P85 (PT, EH and small territories); `audio` is `null` when the anthem item has no P51; `wiki` has only the languages that have an article. Per person, `desc`, `image`, `born`, `died`, `job` are `null` when missing (`born` is negative for BCE). `people` is `[]` for 19 territories (AS AQ BV BQ CW GF TF GL GU HM MP BL SH PM SX GS SJ UM VI). `code` and `speakers` are `null` per language when missing; `languages` is `[]` for AQ BV GP MQ UY (Uruguay's item has no P37).
+
+`image` and `audio` are Wikimedia Commons **file names**, not URLs: thumbnail `https://commons.wikimedia.org/wiki/Special:FilePath/<encodeURIComponent(image)>?width=640`, file page `https://commons.wikimedia.org/wiki/File:<image>` for the credit.
+
+Counts on 2026-10-16: 237 countries with an anthem, 187 with audio (147 `.ogg`, 32 `.oga`, 6 `.wav`, 1 `.mp3`, 1 `.mid` for Pitcairn), 236 with a Wikipedia article; 231 countries with people, 218 with at least 6, 209 with the full 12; 2,617 people, 2,492 with image; 245 countries with languages, 523 entries, 478 with a speaker count.
+
+### Attribution rules
+
+- Wikidata is CC0; the card should still say "Datos: Wikidata" and link each item (`https://www.wikidata.org/wiki/<qid>`) so a wrong fact is fixed at the source.
+- Commons images **and audio** are not CC0: each file has its own license. Link the file page next to every portrait and every anthem player, and show the author and license fetched live (see the Places section for the `imageinfo` call). Most anthem recordings are public domain or US government works, but check per file.
+- `desc` is the Wikidata description (CC0); `wiki` links point to Wikipedia (CC BY-SA 4.0).
+- Say "the people most Wikipedias write about", never "the most famous" or "the greatest". Living politicians dominate; the card should not read as an endorsement.
+
+### Run locally
+
+```sh
+npm run culture                # about 265 SPARQL queries, 10 to 12 minutes from an empty cache
+rm -r data/cache/wikidata      # to force fresh data (shared with npm run places)
+```
+
+Check the console summary (anthems with audio, countries with at least 6 people, languages), then open `public/data/culture.json` and look at `MX`, `JP` and `FR`. Commit the file.

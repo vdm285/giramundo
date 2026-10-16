@@ -201,7 +201,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     depthTest: true, depthWrite: false,
   });
   const outlineGlowMat = new LineMaterial({
-    color: new THREE.Color(ACCENT), linewidth: 7, worldUnits: false, transparent: true, opacity: 0.22,
+    color: new THREE.Color(ACCENT), linewidth: 7, worldUnits: false, transparent: true, opacity: 0.15,
     depthTest: true, depthWrite: false,
   });
   let outline = null;
@@ -356,8 +356,10 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     return best;
   }
 
+  let beaconAt = 0;
   function setBeacon(lat, lon) {
     if (lat == null) { beacon.visible = false; beaconUniforms.opacity.value = 0; return; }
+    beaconAt = performance.now();
     const p = asVector(latLonToVector(lat, lon, 1.006));
     beacon.position.copy(p);
     beacon.lookAt(p.clone().multiplyScalar(2));
@@ -415,7 +417,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     cloudUniforms.opacity.value = approach(cloudUniforms.opacity.value, cloudTarget, dt, 4);
     clouds.visible = cloudUniforms.opacity.value > 0.01 && Boolean(cloudUniforms.cloudMap.value);
     uniforms.cloudOffset.value += dt * 0.0022;
-    atmosUniforms.strength.value = 1.0 - 0.75 * Math.max(uniforms.styleAtlas.value, uniforms.styleData.value);
+    atmosUniforms.strength.value = 0.8 - 0.6 * Math.max(uniforms.styleAtlas.value, uniforms.styleData.value);
 
     const t = now / 1000;
     stars.material.uniforms.time.value = t;
@@ -423,8 +425,11 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     beacon.scale.setScalar(Math.max(0.5, Math.min(1.6, view.dist / 2.4)));
     // Outline widths stay readable but a little slimmer when far.
     const far = Math.min(1, Math.max(0, (view.dist - 1.3) / 4));
-    outlineMat.linewidth = 2.6 - far * 0.9;
-    outlineGlowMat.linewidth = 8 - far * 3;
+    outlineMat.linewidth = 1.9 - far * 0.6;
+    outlineGlowMat.linewidth = 5.5 - far * 2;
+    // The beacon announces the landing, then fades so the map stays clean.
+    const sinceBeacon = now - beaconAt;
+    beaconUniforms.opacity.value = beacon.visible ? Math.max(0, Math.min(1, 1 - (sinceBeacon - 2600) / 1400)) : 0;
     markerMat.uniforms.scale.value = Math.max(0.6, Math.min(1.5, 2.6 / view.dist));
     for (const arc of arcs.children) {
       const u = arc.material.uniforms;
@@ -482,6 +487,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     // 'full' | 'simple'
     const full = level !== 'simple';
     want8k = full;
+    if (full) loadRich();
     targets.clouds = full && cloudUniforms.cloudMap.value ? 1 : 0;
     uniforms.relief.value = full ? 1.6 : 0.6;
     stars.visible = true;
@@ -494,10 +500,16 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
   }
   loadTexture(`${T}earth-night.jpg`, THREE.SRGBColorSpace).then((tex) => { if (tex) { uniforms.nightMap.value = tex; uniforms.hasNight.value = 1; } });
   loadTexture(`${T}earth-water.png`, THREE.NoColorSpace).then((tex) => { if (tex) { uniforms.waterMap.value = tex; uniforms.hasWater.value = 1; } });
-  loadTexture(`${T}earth-topology.png`, THREE.NoColorSpace).then((tex) => { if (tex) { uniforms.topoMap.value = tex; uniforms.hasTopo.value = 1; } });
-  loadTexture(`${T}earth-clouds.jpg`, THREE.NoColorSpace).then((tex) => {
-    if (tex) { uniforms.cloudMap.value = tex; cloudUniforms.cloudMap.value = tex; uniforms.hasCloud.value = 1; targets.clouds = want8k ? 1 : 0; }
-  });
+  // Relief and clouds only in Full quality: Simple never downloads them.
+  let richLoading = false;
+  function loadRich() {
+    if (richLoading) return;
+    richLoading = true;
+    loadTexture(`${T}earth-topology.png`, THREE.NoColorSpace).then((tex) => { if (tex) { uniforms.topoMap.value = tex; uniforms.hasTopo.value = 1; } });
+    loadTexture(`${T}earth-clouds.jpg`, THREE.NoColorSpace).then((tex) => {
+      if (tex) { uniforms.cloudMap.value = tex; cloudUniforms.cloudMap.value = tex; uniforms.hasCloud.value = 1; targets.clouds = want8k ? 1 : 0; }
+    });
+  }
   setInterval(maybeLoad8k, 700);
 
   return {

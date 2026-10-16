@@ -287,6 +287,15 @@ a.chip { text-decoration: none; }
 .place-detail { margin: 12px 0; padding: 12px; background: rgba(255, 255, 255, 0.55); border-radius: 14px; }
 .place-detail img { width: 100%; border-radius: 10px; max-height: 240px; object-fit: cover; }
 
+/* Culture */
+.people { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.person { text-decoration: none; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
+.person img, .person .noface { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; background: var(--paper-3); }
+.person .noface { display: grid; place-items: center; font-family: var(--display); font-size: 2rem; color: var(--muted); }
+.person strong { font-size: 0.92rem; line-height: 1.2; }
+.person span { font-size: 0.78rem; color: var(--muted); line-height: 1.2; }
+.person:hover img { outline: 2px solid var(--accent); }
+
 /* See */
 .video { position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #000; margin: 8px 0 4px; }
 .video iframe, .video img { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

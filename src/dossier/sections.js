@@ -182,7 +182,38 @@ export function renderWiki(m, key) {
     ${page.fallbackLang ? html`<p class="small muted">${t(lang, page.fallbackLang === 'en' ? 'fromEnglish' : 'fromSpanish')}</p>` : nothing}
     <p class="prose">${sentences(page.extract, 900)}</p>
     <p class="links">${page.url ? html`<a href=${page.url} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a>` : nothing}</p>
-    ${dishList(dishes, lang)}`;
+    ${dishList(dishes, lang)}
+    ${key === 'cultura' ? renderCulture(m) : nothing}`;
+}
+
+// Anthem, languages and notable people from Wikidata (public/data/culture.json).
+function renderCulture(m) {
+  const { lang, culture } = m;
+  if (!culture) return nothing;
+  const anthem = culture.anthem;
+  const people = culture.people || [];
+  const langs = culture.languages || [];
+  const nf = (n) => new Intl.NumberFormat(locale(lang), { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  return html`
+    ${anthem ? html`
+      <h3>${t(lang, 'anthem')}</h3>
+      <p style="margin:0 0 6px"><strong>${anthem.label?.[lang] || anthem.label?.en || ''}</strong>
+        ${anthem.wiki?.[lang] || anthem.wiki?.en ? html` · <a href=${anthem.wiki?.[lang] || anthem.wiki?.en} target="_blank" rel="noreferrer">Wikipedia</a>` : nothing}</p>
+      ${anthem.audio ? html`<audio controls preload="none" src=${commonsThumb(anthem.audio).replace(/\?width=\d+$/, '')} style="width:100%"></audio>
+        <p class="small muted"><a href=${commonsPage(anthem.audio)} target="_blank" rel="noreferrer">Wikimedia Commons</a> · ${t(lang, 'anthemNote')}</p>` : nothing}` : nothing}
+    ${langs.length ? html`
+      <h3>${t(lang, 'languages')}</h3>
+      <div class="chips">${langs.map((l) => html`<span class="chip" title=${l.speakers ? `${nf(l.speakers)} ${t(lang, 'speakers')}` : ''}>${l.label?.[lang] || l.label?.en}${l.speakers ? html` <small class="muted">· ${nf(l.speakers)}</small>` : nothing}</span>`)}</div>
+      <p class="small muted">${t(lang, 'languagesNote')}</p>` : nothing}
+    ${people.length ? html`
+      <h3>${t(lang, 'people')}</h3>
+      <div class="people">${people.map((p) => html`
+        <a class="person" href=${`https://www.wikidata.org/wiki/${p.qid}`} target="_blank" rel="noreferrer" title=${p.desc?.[lang] || p.desc?.en || ''}>
+          ${p.image ? html`<img loading="lazy" src=${commonsThumb(p.image, 240)} alt="">` : html`<div class="noface">${(p.label?.[lang] || p.label?.en || '?').slice(0, 1)}</div>`}
+          <strong>${p.label?.[lang] || p.label?.en}</strong>
+          <span>${[p.job?.[lang] || p.job?.en || '', p.born ? `${p.born}${p.died ? `–${p.died}` : ''}` : ''].filter(Boolean).join(' · ')}</span>
+        </a>`)}</div>
+      <p class="small muted">${t(lang, 'peopleNote')}</p>` : nothing}`;
 }
 
 function dishList(dishes, lang) {

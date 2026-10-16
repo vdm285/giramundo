@@ -180,6 +180,12 @@ const STR = {
     cityCoords: 'Coordenadas',
     cityOthers: 'Otras ciudades',
     cities: 'Ciudades',
+    anthem: 'Himno',
+    anthemNote: 'Grabación publicada en Commons; la licencia está en la página del archivo.',
+    speakers: 'hablantes',
+    languagesNote: 'Lenguas oficiales según Wikidata; la cifra es de hablantes nativos en el mundo, no solo en este país.',
+    people: 'Gente que dejó huella',
+    peopleNote: 'Personas con ciudadanía de este país, ordenadas por cuántas Wikipedias les dedican un artículo. Es una medida de fama, no de mérito.',
   },
   en: {
     appName: 'Giramundo',
@@ -359,6 +365,12 @@ const STR = {
     cityCoords: 'Coordinates',
     cityOthers: 'Other cities',
     cities: 'Cities',
+    anthem: 'Anthem',
+    anthemNote: 'Recording published on Commons; the license is on the file page.',
+    speakers: 'speakers',
+    languagesNote: 'Official languages per Wikidata; the figure is native speakers worldwide, not only in this country.',
+    people: 'People who left a mark',
+    peopleNote: 'Citizens of this country, ranked by how many Wikipedias have an article about them. A measure of fame, not merit.',
   },
 };
 

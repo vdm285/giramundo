@@ -156,7 +156,7 @@ void main() {
   // ---------- Earth ----------
   vec3 day = hasDay > 0.5 ? texture2D(dayMap, uv).rgb : mix(vec3(0.02, 0.07, 0.16), vec3(0.18, 0.22, 0.12), cell.land);
   float luma = dot(day, vec3(0.2126, 0.7152, 0.0722));
-  day = mix(vec3(luma), day, 1.18);
+  day = mix(vec3(luma), day, 1.08);
   day = mix(day, day * vec3(0.78, 0.92, 1.12), water * 0.55);
   vec3 nightC = hasNight > 0.5 ? texture2D(nightMap, uv).rgb : vec3(0.0);
 
@@ -175,11 +175,11 @@ void main() {
   float fresnelW = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
   earth += water * (spec * vec3(1.0, 0.9, 0.75) + fresnelW * vec3(0.10, 0.18, 0.32)) * terminator * (1.0 - clouds * 0.8);
   float nightAmt = 1.0 - smoothstep(-0.22, 0.06, sunFacing);
-  vec3 lights = pow(nightC, vec3(1.35)) * vec3(1.65, 1.12, 0.62) * 2.4;
+  vec3 lights = pow(nightC, vec3(1.35)) * vec3(1.65, 1.12, 0.62) * 1.8;
   earth += lights * nightAmt * (1.0 - clouds * 0.65);
   earth += day * vec3(0.18, 0.24, 0.42) * 0.035 * nightAmt;
   float dusk = exp(-pow(sunFacing * 4.5, 2.0));
-  earth += vec3(0.9, 0.38, 0.12) * dusk * 0.045 * (1.0 - water * 0.4);
+  earth += vec3(0.9, 0.38, 0.12) * dusk * 0.03 * (1.0 - water * 0.4);
 
   // ---------- Atlas (paper) ----------
   float hill = clamp(1.0 + 7.0 * (-grad.x + grad.y), 0.72, 1.28);
@@ -222,7 +222,7 @@ void main() {
   // separate line mesh drawn on top of the sphere.
   vec3 acc = toLinear(accent);
   vec3 acc2 = toLinear(accent2);
-  float tint = mix(0.22, 0.40, styleAtlas) * (1.0 - styleData * 0.7);
+  float tint = mix(0.12, 0.26, styleAtlas) * (1.0 - styleData * 0.7);
   color = mix(color, acc, cell.sel * tint);
   color = mix(color, acc2, cell.cmp * tint * 0.9);
   color += vec3(0.07, 0.065, 0.05) * cell.hov * (1.0 - cell.sel) * (1.0 + styleAtlas);
@@ -231,7 +231,7 @@ void main() {
   float fres = pow(1.0 - NdV, 2.6);
   vec3 atm = mix(vec3(0.26, 0.52, 1.0), vec3(1.0, 0.48, 0.2), dusk * 0.75);
   float atmAmt = smoothstep(-0.35, 0.5, sunFacing) * (1.0 - styleAtlas * 0.7) * (1.0 - styleData * 0.75);
-  color += atm * fres * 0.62 * atmAmt;
+  color += atm * fres * 0.42 * atmAmt;
   color = mix(color, color + vec3(0.06, 0.08, 0.1) * fres, styleAtlas);
 
   gl_FragColor = vec4(max(color, vec3(0.0)), 1.0);

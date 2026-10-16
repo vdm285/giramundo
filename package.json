@@ -16,7 +16,8 @@
     "test": "node --test tests/*.test.mjs",
     "news": "node tools/build-news.mjs",
     "radio": "node tools/build-radio.mjs",
-    "cities": "node tools/build-cities.mjs"
+    "cities": "node tools/build-cities.mjs",
+    "culture": "node tools/build-culture.mjs"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",

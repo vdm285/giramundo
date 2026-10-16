@@ -63,13 +63,14 @@ async function optional(url) {
 }
 
 export async function loadExtras(world, base) {
-  const [indicators, pophistory, places, videoSeed, radio, cities] = await Promise.all([
+  const [indicators, pophistory, places, videoSeed, radio, cities, culture] = await Promise.all([
     optional(`${base}data/indicators.json`),
     optional(`${base}data/pophistory.json`),
     optional(`${base}data/places.json`),
     optional(`${base}data/videos-seed.json`),
     optional(`${base}data/radio.json`),
     optional(`${base}data/cities.json`),
+    optional(`${base}data/culture.json`),
   ]);
   Object.assign(world, {
     indicators: indicators?.indicators || null,
@@ -79,6 +80,7 @@ export async function loadExtras(world, base) {
     videoSeed: videoSeed || null,
     radio: radio?.countries || null,
     cities: cities?.countries || null,
+    culture: culture?.countries || null,
     extrasReady: true,
   });
   return world;
@@ -134,7 +136,7 @@ export async function loadWorld(base) {
   return {
     built: facts.built,
     sources: facts.sources,
-    indicators: null, indicatorsBuilt: null, pophistory: null, places: null, videoSeed: null, radio: null, cities: null, extrasReady: false,
+    indicators: null, indicatorsBuilt: null, pophistory: null, places: null, videoSeed: null, radio: null, cities: null, culture: null, extrasReady: false,
     countries: all,
     byIso,
     byPlace: new Map(specials.map((s) => [s.placeId, s])),

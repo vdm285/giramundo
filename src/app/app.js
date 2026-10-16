@@ -604,7 +604,7 @@ function shell(s) {
           ? renderGame({ lang: s.lang, game: s.game, world, on, base })
           : s.city
             ? renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base })
-            : renderDossier({ ...s, country, world, places, on, base, feature: featureOf(country) })}
+            : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, on, base, feature: featureOf(country) })}
       </div>
     </aside>
     <dialog id="about">

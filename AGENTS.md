@@ -28,7 +28,8 @@ A static globe on GitHub Pages. Three.js draws the Earth; a Canvas 2D flat map i
 - `src/app/app.js`: store, surface switching, content fetching per country, the shell. `src/app/router.js`: hash `#mx/ahora/en`.
 - `src/dossier/`: lit templates. `dossier.js` is the frame; `sections.js` the seven sections. lit escapes by default; never use `unsafeHTML` on fetched text.
 - `src/live/sources.js`: every outside call. Add new sources there, with their license in a comment.
-- `public/data/facts.json`: one row per country (`npm run data`). `public/data/wiki/{iso}.json`: extracts (`npm run stories`). `public/data/indicators.json`, `pophistory.json` (`npm run indicators`). `public/data/places.json` (`npm run places`).
+- `public/data/facts.json`: one row per country (`npm run data`). `public/data/wiki/{iso}.json`: extracts (`npm run stories`). `public/data/indicators.json`, `pophistory.json` (`npm run indicators`). `public/data/places.json` (`npm run places`). `public/data/radio.json` (`npm run radio`). `public/data/cities.json` (`npm run cities`). `public/data/culture.json` (`npm run culture`). Deploy-time only, never committed: `public/data/news/`, `public/data/videos/`.
+- Loading is two-phase (`src/data/load.js`): `loadWorld` fetches shapes and facts so the globe can mount; `loadExtras` adds everything else in place. A new dataset goes in `loadExtras` and is read defensively (it may be null for a moment).
 - `tools/net.mjs`: shared fetch, cache, pool for the build scripts.
 - `tests/`: `npm test`. Do not weaken a test to make a change pass.
 
