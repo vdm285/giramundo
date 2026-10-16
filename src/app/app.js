@@ -3,7 +3,7 @@
 // dossier live in ../dossier; drawing lives in ../globe and ../flat.
 
 import { html, nothing, render } from 'lit';
-import { loadWorld } from '../data/load.js';
+import { loadExtras, loadWorld } from '../data/load.js';
 import { searchCountries } from '../data/search.js';
 import { ALIAS_NOTES, norm } from '../data/aliases.js';
 import { formatTime } from '../data/format.js';
@@ -776,13 +776,10 @@ export async function boot() {
     return;
   }
   play = createPlay({ store, world, surface: () => surface, select, flyToCountry });
-
-  // Which country opens: the link wins; otherwise the reader's setting.
-  let opening = null;
-  if (hashed?.iso && world.byIso.get(hashed.iso)) opening = hashed.iso;
-  else if (hashed?.placeId && world.byPlace.get(hashed.placeId)) opening = hashed.placeId;
-  else opening = await chooseOpening(store.get());
-  store.set({ id: opening });
+  // Phase two of the data (places, radio, cities, indicators) streams in
+  // while the globe is already up. Nothing below the surface mount waits on it.
+  const extras = loadExtras(world, base);
+  store.set({ id: null });
 
   const ui = document.getElementById('ui');
   const draw = () => {
@@ -809,7 +806,14 @@ export async function boot() {
     console.error(error);
     if (!store.get().flat) { store.set({ flat: true }); await mountSurface(true); }
   }
-  select(store.get().id, { fly: true });
+
+  await extras;
+  // Which country opens: the link wins; otherwise the reader's setting.
+  let opening = null;
+  if (hashed?.iso && world.byIso.get(hashed.iso)) opening = hashed.iso;
+  else if (hashed?.placeId && world.byPlace.get(hashed.placeId)) opening = hashed.placeId;
+  else opening = await chooseOpening(store.get());
+  select(opening, { fly: true });
   if (readSetting('coached', false)) document.getElementById('coach').hidden = true;
   setTimeout(() => { document.getElementById('coach').hidden = true; writeSetting('coached', true); }, 9000);
 
