@@ -8,7 +8,8 @@ import { searchCountries } from '../data/search.js';
 import { ALIAS_NOTES, norm } from '../data/aliases.js';
 import { formatTime } from '../data/format.js';
 import { nameWater } from '../geo/oceans.js';
-import { createGlobe } from '../globe/scene.js';
+// The 3D engine is loaded on demand (see mountSurface), so the flat map
+// path never downloads Three.js.
 import { createFlatMap } from '../flat/map.js';
 import { renderDossier } from '../dossier/dossier.js';
 import * as live from '../live/sources.js';
@@ -304,9 +305,13 @@ async function mountSurface(flat) {
   canvas.hidden = flat;
   flatCanvas.hidden = !flat;
   document.body.classList.toggle('flat', flat);
-  const next = flat
-    ? createFlatMap(flatCanvas, world, { base })
-    : await createGlobe(canvas, world, { base, reduced });
+  let next;
+  if (flat) {
+    next = createFlatMap(flatCanvas, world, { base });
+  } else {
+    const { createGlobe } = await import('../globe/scene.js');
+    next = await createGlobe(canvas, world, { base, reduced });
+  }
   surface = next;
   if (keep) { next.view.lat = keep.lat; next.view.lon = keep.lon; }
   const s = store.get();

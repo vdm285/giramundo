@@ -93,7 +93,11 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
   renderer.setClearColor(0x05070c, 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-  renderer.setPixelRatio(pixelRatio);
+  // Start at 1.5 at most; adaptResolution moves it from there.
+  renderer.setPixelRatio(Math.min(pixelRatio, 1.5));
+  let dirtyFrames = 4;
+  let frameIndex = 0;
+  let lastSig = '';
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 260);
@@ -342,6 +346,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     markers = new THREE.Points(geom, markerMat);
     markers.frustumCulled = false;
     globe.add(markers);
+    dirtyFrames = 4;
   }
 
   function markerAt(clientX, clientY, radiusPx = 16) {
@@ -360,6 +365,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
   function setBeacon(lat, lon) {
     if (lat == null) { beacon.visible = false; beaconUniforms.opacity.value = 0; return; }
     beaconAt = performance.now();
+    dirtyFrames = 4;
     const p = asVector(latLonToVector(lat, lon, 1.006));
     beacon.position.copy(p);
     beacon.lookAt(p.clone().multiplyScalar(2));
@@ -402,7 +408,10 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     if (!running) return;
     const dt = Math.min(0.05, (now - lastNow) / 1000);
     lastNow = now;
-    control.update(now, dt);
+    const moving = control.update(now, dt);
+    // Any texture or flag change repaints for a few frames.
+    const sig = `${uniforms.hasDay.value}${uniforms.hasNight.value}${uniforms.hasWater.value}${uniforms.hasTopo.value}${uniforms.hasCloud.value}${uniforms.dayMap.value?.id}${uniforms.selectedId.value}${uniforms.hoverId.value}${uniforms.compareId.value}${markerList.length}`;
+    if (sig !== lastSig) { lastSig = sig; dirtyFrames = 4; }
     quaternionForView(view.lat, view.lon, q);
     globe.quaternion.copy(q);
     camera.position.set(0, 0, view.dist);
@@ -437,7 +446,17 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
       if (u.progress.value < 1) u.progress.value = Math.min(1, (now - arc.userData.t0) / 1400);
     }
 
-    renderer.render(scene, camera);
+    // Render on demand: when nothing moves, draw a third of the frames. The
+    // clouds and stars still drift, just at 20 fps, which the eye forgives.
+    const settling = Math.abs(uniforms.styleAtlas.value - targets.atlas) > 0.002
+      || Math.abs(uniforms.styleData.value - targets.data) > 0.002
+      || Math.abs(cloudUniforms.opacity.value - cloudTarget) > 0.002
+      || (beacon.visible && beaconUniforms.opacity.value > 0)
+      || arcs.children.some((a) => a.material.uniforms.progress.value < 1);
+    const busy = moving || settling || dirtyFrames > 0;
+    if (dirtyFrames > 0) dirtyFrames -= 1;
+    frameIndex += 1;
+    if (busy || frameIndex % 3 === 0) renderer.render(scene, camera);
 
     frames += 1;
     if (now - fpsWindowStart > 1000) {
@@ -446,8 +465,38 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
       if (sampleStats.length > 10) sampleStats.shift();
       frames = 0;
       fpsWindowStart = now;
+      adaptResolution(busy);
     }
     requestAnimationFrame(frame);
+  }
+
+  // Adaptive resolution: step the pixel ratio down when the frame rate
+  // sags while the scene is moving, and back up when it is comfortable.
+  // Invisible on a sphere with clouds; it halves or thirds the pixel work.
+  let scale = Math.min(pixelRatio, 1.5);
+  let scaleCap = Math.min(pixelRatio, 1.5);
+  let goodStreak = 0;
+  function adaptResolution(wasBusy) {
+    if (document.visibilityState !== 'visible' || !wasBusy) return;
+    if (fps < 48 && scale > 0.7) {
+      scale = Math.max(0.7, scale * 0.85);
+      goodStreak = 0;
+      applyScale();
+    } else if (fps > 57 && scale < scaleCap) {
+      goodStreak += 1;
+      if (goodStreak >= 3) {
+        scale = Math.min(scaleCap, scale * 1.1);
+        goodStreak = 0;
+        applyScale();
+      }
+    }
+  }
+  function applyScale() {
+    renderer.setPixelRatio(scale);
+    stars.material.uniforms.pixelRatio.value = scale;
+    markerMat.uniforms.pixelRatio.value = scale;
+    resize();
+    dirtyFrames = 4;
   }
 
   window.addEventListener('resize', resize);
@@ -491,9 +540,9 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     targets.clouds = full && cloudUniforms.cloudMap.value ? 1 : 0;
     uniforms.relief.value = full ? 1.6 : 0.6;
     stars.visible = true;
-    stars.material.uniforms.pixelRatio.value = full ? pixelRatio : pixelRatio * 0.7;
-    renderer.setPixelRatio(full ? pixelRatio : Math.min(pixelRatio, 1));
-    resize();
+    scaleCap = full ? Math.min(pixelRatio, 1.5) : Math.min(pixelRatio, 1);
+    scale = Math.min(scale, scaleCap);
+    applyScale();
     if (!full && day4k) { uniforms.dayMap.value = day4k; }
     if (full && day8k) { uniforms.dayMap.value = day8k; }
     maybeLoad8k();
@@ -540,6 +589,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
         if (hex) dataPalette.set(feature.properties.id, hexToRgb(hex), true);
       }
       dataPalette.commit();
+      dirtyFrames = 4;
     },
     setMarkers,
     setBeacon,
