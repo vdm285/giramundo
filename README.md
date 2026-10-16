@@ -16,6 +16,10 @@ npm run dev
 
 Open http://localhost:5173. For headlines locally, run `npm run news` once (it takes about two minutes and writes files that are not committed).
 
+## Settings
+
+The gear at the right end of the bottom dock opens the only settings menu: visual quality (Automatic, Full, Simple, or the flat map), which country opens when there is no link (country of the day, your home country, where you are, random, or the last one you saw), your home country, the idle spin, and a slider to move the sun. Everything is stored in the browser only. A shared link always opens the country in the link.
+
 `npm run build` makes the static site in `dist/`. GitHub Pages publishes `main`, on every push and on a schedule every six hours so the headlines stay fresh.
 
 ## What is where

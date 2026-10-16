@@ -169,6 +169,7 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   const s = store.get();
   const feature = featureOf(country);
   store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null });
+  writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
   surface?.setSpin(false);
@@ -197,6 +198,13 @@ function syncMarkers() {
     }
   }
   surface.setMarkers(markers);
+}
+
+// 'auto' starts full and drops to simple if the frame rate says so (see watchPerformance).
+let autoLevel = 'full';
+function applyQuality() {
+  const q = store.get().quality;
+  surface?.setQuality?.(q === 'auto' ? autoLevel : q);
 }
 
 function applyDataColors() {
@@ -232,7 +240,10 @@ async function mountSurface(flat) {
   if (keep) { next.view.lat = keep.lat; next.view.lon = keep.lon; }
   const s = store.get();
   next.setStyle(s.view);
-  next.setSpin(s.collapsed && !reduced);
+  next.setSpin(s.spin && s.collapsed && !reduced);
+  next.setSunOffset(s.sun);
+  surface = next;
+  applyQuality();
   const country = countryOf(s.id);
   next.setSelected(featureOf(country));
   if (country?.ll) next.setBeacon(country.ll[0], country.ll[1]);
@@ -300,7 +311,7 @@ async function on(action, payload) {
       break;
     case 'collapse':
       store.set({ collapsed: !s.collapsed });
-      surface?.setSpin(!s.collapsed && !reduced);
+      surface?.setSpin(s.spin && !s.collapsed && !reduced);
       if (!s.collapsed) surface?.control?.hold?.(6000);
       break;
     case 'place': {
@@ -357,6 +368,28 @@ async function on(action, payload) {
       break;
     }
     case 'about': document.getElementById('about').showModal(); break;
+    case 'settings': document.getElementById('settings').showModal(); break;
+    case 'quality':
+      store.set({ quality: payload });
+      writeSetting('quality', payload);
+      applyQuality();
+      break;
+    case 'opening':
+      store.set({ opening: payload });
+      writeSetting('opening', payload);
+      break;
+    case 'set-home':
+      if (s.id) { store.set({ home: s.id }); writeSetting('home', s.id); }
+      break;
+    case 'spin':
+      store.set({ spin: payload });
+      writeSetting('spin', payload);
+      surface?.setSpin(payload && s.collapsed && !reduced);
+      break;
+    case 'sun':
+      store.set({ sun: payload });
+      surface?.setSunOffset(payload);
+      break;
     default: break;
   }
 }
@@ -365,6 +398,7 @@ async function on(action, payload) {
 
 const globeIcon = html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>`;
 const flatIcon = html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>`;
+const gearIcon = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
 const searchIcon = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`;
 
 function shell(s) {
@@ -396,7 +430,23 @@ function shell(s) {
       <button @click=${() => on('surprise')}>${t(s.lang, 'surprise')}</button>
       ${s.collapsed && country ? html`<button @click=${() => on('collapse')}>${t(s.lang, 'expand')}</button>` : nothing}
       <button @click=${() => on('about')}>${t(s.lang, 'about')}</button>
+      <button class="gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
     </nav>
+    <dialog id="settings" class="settings">
+      <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
+      <h2>${t(s.lang, 'settings')}</h2>
+      <h3>${t(s.lang, 'quality')}</h3>
+      <div class="opts">${['auto', 'full', 'simple'].map((q) => html`<button aria-pressed=${s.quality === q} @click=${() => on('quality', q)}>${t(s.lang, `quality${q[0].toUpperCase()}${q.slice(1)}`)}</button>`)}
+        <button aria-pressed=${s.flat} @click=${() => on('flat', !s.flat)}>${t(s.lang, 'viewFlat')}</button></div>
+      <p class="help">${t(s.lang, 'qualityHelp')}</p>
+      <h3>${t(s.lang, 'opening')}</h3>
+      <div class="opts">${['day', 'home', 'here', 'random', 'last'].map((o) => html`<button aria-pressed=${s.opening === o} @click=${() => on('opening', o)}>${t(s.lang, `open${o[0].toUpperCase()}${o.slice(1)}`)}</button>`)}</div>
+      <p class="help">${t(s.lang, 'openingHint')}</p>
+      <h3>${t(s.lang, 'homeBase')}: ${countryOf(s.home)?.name?.[s.lang] || s.home}</h3>
+      <div class="opts"><button @click=${() => on('set-home')} ?disabled=${!s.id || s.id === s.home}>${t(s.lang, 'setHome')}</button></div>
+      <label class="row"><input type="checkbox" .checked=${s.spin} @change=${(e) => on('spin', e.target.checked)}> ${t(s.lang, 'spin')}</label>
+      <label class="row">${t(s.lang, 'sunOffset')} <input type="range" min="-12" max="12" step="0.5" .value=${String(s.sun)} @input=${(e) => on('sun', Number(e.target.value))}> <button type="button" class="chip" @click=${() => on('sun', 0)}>${t(s.lang, 'sunNow')}</button></label>
+    </dialog>
     ${legend ? html`
       <div class="legend">
         <strong>${legend.def.label?.[s.lang]}</strong>
@@ -459,6 +509,52 @@ function pickHit(c) {
 
 // ---------- boot ----------
 
+// The pool for "country of the day" and "random": real countries with a
+// shape, people, and at least one World Heritage photo so the hero lands.
+function showcasePool() {
+  return world.countries.filter((c) => c.iso2 && c.onMap && c.iso2 !== 'AQ' && (c.population || 0) > 1e6
+    && world.places?.[c.iso2]?.heritage?.some((h) => h.image));
+}
+
+function countryOfTheDay() {
+  const pool = showcasePool();
+  const day = Math.floor(Date.now() / 86400000);
+  // A fixed shuffle so consecutive days do not walk the alphabet.
+  let x = Math.imul(day, 2654435761) >>> 0;
+  x = (x ^ (x >>> 13)) >>> 0;
+  x = Math.imul(x, 1274126177) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return pool[x % pool.length]?.iso2 || 'MX';
+}
+
+function locate() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 3600000 },
+    );
+  });
+}
+
+async function chooseOpening(s) {
+  switch (s.opening) {
+    case 'home': return countryOf(s.home) ? s.home : 'MX';
+    case 'random': { const pool = showcasePool(); return pool[Math.floor(Math.random() * pool.length)]?.iso2 || 'MX'; }
+    case 'last': { const last = readSetting('last', null); return countryOf(last) ? last : countryOfTheDay(); }
+    case 'here': {
+      const here = await locate();
+      const feature = here && world.index.find(here.lon, here.lat);
+      const country = countryOfFeature(feature);
+      if (country) return country.iso2 || country.placeId;
+      toast(t(s.lang, 'locFail'));
+      return countryOfTheDay();
+    }
+    default: return countryOfTheDay();
+  }
+}
+
 function canWebGL() {
   try {
     const test = document.createElement('canvas');
@@ -472,7 +568,14 @@ function watchPerformance() {
     if (suggestedFlat || !surface || store.get().flat) return;
     if (document.visibilityState !== 'visible' || performance.now() - startedAt < 15000) return;
     const hist = surface.getFpsHistory?.() || [];
-    if (hist.length >= 6 && hist.slice(-6).every((f) => f < 20)) {
+    if (hist.length < 6 || !hist.slice(-6).every((f) => f < 20)) return;
+    // In automatic quality, step down to the simple globe before offering the flat map.
+    if (store.get().quality === 'auto' && autoLevel === 'full') {
+      autoLevel = 'simple';
+      applyQuality();
+      return;
+    }
+    {
       suggestedFlat = true;
       const lang = store.get().lang;
       toast(t(lang, 'flatSuggest'), [
@@ -491,7 +594,11 @@ export async function boot() {
     lang,
     view: readSetting('view', 'earth'),
     flat: readSetting('flat', false),
-    spin: true,
+    quality: readSetting('quality', 'auto'),
+    opening: readSetting('opening', 'day'),
+    home: readSetting('home', 'MX'),
+    spin: readSetting('spin', true),
+    sun: 0,
     id: 'MX',
     section: hashed?.section || 'historia',
     collapsed: false,
@@ -513,8 +620,12 @@ export async function boot() {
     bootError.textContent = t(lang, 'boot');
     return;
   }
-  if (hashed?.iso && world.byIso.get(hashed.iso)) store.set({ id: hashed.iso });
-  if (hashed?.placeId && world.byPlace.get(hashed.placeId)) store.set({ id: hashed.placeId });
+  // Which country opens: the link wins; otherwise the reader's setting.
+  let opening = null;
+  if (hashed?.iso && world.byIso.get(hashed.iso)) opening = hashed.iso;
+  else if (hashed?.placeId && world.byPlace.get(hashed.placeId)) opening = hashed.placeId;
+  else opening = await chooseOpening(store.get());
+  store.set({ id: opening });
 
   const ui = document.getElementById('ui');
   const draw = () => {

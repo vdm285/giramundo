@@ -63,10 +63,21 @@ Phases are built in order. Each ends with a deploy and a check-in.
 ## Parked ideas (not forgotten)
 
 - Kid mode as a layer: larger type, shorter extracts, gentle news filter, Vikidia links.
-- Historical context behind headlines: link today's news to the history section and to past events.
-- Live radio (Radio Garden style) via the Radio-Browser open directory.
+- Historical context behind headlines: link today's news to the history section and to past events. First step (now): Wikipedia "in the news" and "most read" items that mention the country, plus background articles. Later: an optional AI layer where the reader pastes their own key (Claude, OpenAI, or a local model), stored only in their browser, that summarizes with context and answers follow-up questions about the country, comparisons included. Nothing runs by default.
+- Live radio: AI subtitles or live translation of what is playing, as an optional layer, much later.
 - Flights overhead (OpenSky snapshot).
 - Cities as a second level of tap.
+- Travel: flights and stays with approximate costs for a country the reader falls for.
+- Phone layout polish; VR.
+- **The long horizon, in a footnote.** Giramundo is the Earth level of a larger family Victor imagines: zoom out to the solar system, the Milky Way and galaxy clusters (NASA imagery, astronomy); zoom in from Earth to a city, to a person, to organs, tissues, cells, molecules, atoms, particles. Each level would be its own repository with its own focus, linked to its neighbors by a deliberate "step up / step down" control, never by an accidental scroll. Modular by design, so one level can be world-class without waiting for the others. Giramundo should stay the best Earth level it can be; the only thing it owes that future is clean interfaces and good docs.
+
+## Modes and settings
+
+Rich by default, simple on demand, and never forced. Settings live in one quiet menu (the gear in the dock), documented in the README:
+
+- **Visual quality**: Auto (measures the frame rate), Full (clouds, relief, 8k plate when close, more stars), Simple (no clouds, 4k plate, fewer stars), Flat map.
+- **Opening country** when there is no link: Country of the day (default), Home (Mexico, or a country you pick), My location (asks for permission), Random, Last visited.
+- Language, idle spin, sun time offset.
 
 ## Decision log
 
@@ -75,4 +86,6 @@ Phases are built in order. Each ends with a deploy and a check-in.
 - 2026-10-16: Flat map uses the equirectangular projection so it reuses the globe's plates and hit-testing.
 - 2026-10-16: Deploy-time data collection instead of committing feeds, to keep the repository small.
 - 2026-10-16: The previous session's unfinished shader rewrite is mined for parts, not wired in as-is.
+- 2026-10-16: Rebuilt from scratch: new globe, flat map, seven-section dossier, deploy-time pipelines. Kid mode, text-to-speech, templated hooks and the old quiz and tours removed.
+- 2026-10-16: Next phases in order of appetite: local radio, games and tours, deeper dossier. Mobile last. 8k plate approved (Solar System Scope, CC BY 4.0) behind a quality setting. News context: Wikipedia links now, reader-keyed AI parked. Opening country is a reader setting, default country of the day.
 - 2026-10-15: Engine is Three.js; Natural Earth 1:50m shapes; no news API keys; Wikipedia extracts vendored.

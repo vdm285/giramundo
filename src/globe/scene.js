@@ -451,13 +451,47 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
 
   // Textures stream in after the first frame so the globe appears at once.
   const T = `${base}textures/`;
-  loadTexture(`${T}earth-day.jpg`, THREE.SRGBColorSpace).then((tex) => { if (tex) { uniforms.dayMap.value = tex; uniforms.hasDay.value = 1; } });
+  let day4k = null;
+  let day8k = null;
+  let want8k = false;
+  let loading8k = false;
+  loadTexture(`${T}earth-day.jpg`, THREE.SRGBColorSpace).then((tex) => {
+    if (!tex) return;
+    day4k = tex;
+    if (!day8k) { uniforms.dayMap.value = tex; uniforms.hasDay.value = 1; }
+  });
+  // The 8k plate (Solar System Scope, CC BY 4.0) only when close and in full quality.
+  function maybeLoad8k() {
+    if (!want8k || day8k || loading8k || view.dist > 2.2) return;
+    loading8k = true;
+    loadTexture(`${T}earth-day-8k.jpg`, THREE.SRGBColorSpace).then((tex) => {
+      loading8k = false;
+      if (!tex) return;
+      day8k = tex;
+      if (want8k) { uniforms.dayMap.value = tex; uniforms.hasDay.value = 1; }
+    });
+  }
+  function applyQuality(level) {
+    // 'full' | 'simple'
+    const full = level !== 'simple';
+    want8k = full;
+    targets.clouds = full && cloudUniforms.cloudMap.value ? 1 : 0;
+    uniforms.relief.value = full ? 1.6 : 0.6;
+    stars.visible = true;
+    stars.material.uniforms.pixelRatio.value = full ? pixelRatio : pixelRatio * 0.7;
+    renderer.setPixelRatio(full ? pixelRatio : Math.min(pixelRatio, 1));
+    resize();
+    if (!full && day4k) { uniforms.dayMap.value = day4k; }
+    if (full && day8k) { uniforms.dayMap.value = day8k; }
+    maybeLoad8k();
+  }
   loadTexture(`${T}earth-night.jpg`, THREE.SRGBColorSpace).then((tex) => { if (tex) { uniforms.nightMap.value = tex; uniforms.hasNight.value = 1; } });
   loadTexture(`${T}earth-water.png`, THREE.NoColorSpace).then((tex) => { if (tex) { uniforms.waterMap.value = tex; uniforms.hasWater.value = 1; } });
   loadTexture(`${T}earth-topology.png`, THREE.NoColorSpace).then((tex) => { if (tex) { uniforms.topoMap.value = tex; uniforms.hasTopo.value = 1; } });
   loadTexture(`${T}earth-clouds.jpg`, THREE.NoColorSpace).then((tex) => {
-    if (tex) { uniforms.cloudMap.value = tex; cloudUniforms.cloudMap.value = tex; uniforms.hasCloud.value = 1; targets.clouds = 1; }
+    if (tex) { uniforms.cloudMap.value = tex; cloudUniforms.cloudMap.value = tex; uniforms.hasCloud.value = 1; targets.clouds = want8k ? 1 : 0; }
   });
+  setInterval(maybeLoad8k, 700);
 
   return {
     view,
@@ -493,6 +527,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     addArc,
     clearArcs,
     setClouds(on) { targets.clouds = on ? 1 : 0; },
+    setQuality: applyQuality,
     setSunOffset(hours) { sunOffsetHours = hours; },
     setSpin: control.setSpin,
     getFps: () => fps,

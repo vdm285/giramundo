@@ -17,6 +17,7 @@
 // retries via fetchRetry, and a total time budget. One failing feed never stops
 // the run: that country gets empty lists and an `error` string.
 
+import { pathToFileURL } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { root, UA, fetchRetry, pool, loadFacts } from './net.mjs';
@@ -276,7 +277,7 @@ async function main() {
 }
 
 // Run only when executed directly (node tools/build-news.mjs), so tests can import parseRss.
-const isMain = process.argv[1] && import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, '/')}`).href;
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   main().catch((err) => {
     // Even a catastrophic failure must not break the deploy; the previous build's files (if any) stay.

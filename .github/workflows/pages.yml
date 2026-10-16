@@ -46,6 +46,9 @@ jobs:
       - run: npm run build
         env:
           VITE_BASE: /giramundo/
+          # Optional: a Google Maps Embed API key restricted to this site's URL
+          # (repository variable). Without it, Ver shows links instead of embeds.
+          VITE_MAPS_EMBED_KEY: ${{ vars.VITE_MAPS_EMBED_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
