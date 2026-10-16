@@ -27,7 +27,7 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          VITE_BASE: /interactive-globe/
+          VITE_BASE: /giramundo/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

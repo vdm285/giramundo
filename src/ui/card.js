@@ -169,7 +169,7 @@ export function renderCard(model) {
     <div class="near"><span>${esc(nearLabel)}</span>${near.map((c) => `<button type="button" class="chip" data-action="go" data-iso="${esc(c.iso2 || c.placeId)}">${esc(c.name[lang] || c.name.en)}</button>`).join('') || `<em>${esc(t(lang, 'noBorder'))}</em>`}</div>
     ${kids ? `<p class="family"><strong>${esc(t(lang, 'family'))}</strong> ${esc(familyQuestion(name, lang))}</p>` : `<p class="family">${esc(familyQuestion(name, lang))}</p>`}
     <p class="src">${esc(t(lang, 'sources'))}: Wikipedia (CC BY-SA)${country.popYear ? `, World Bank ${country.popYear}` : ''}, Natural Earth. ${esc(built)}.
-      <a href="https://github.com/vdm285/interactive-globe/issues/new?title=${encodeURIComponent(`Corrección: ${name}`)}" target="_blank" rel="noreferrer">${esc(t(lang, 'report'))}</a>
+      <a href="https://github.com/vdm285/giramundo/issues/new?title=${encodeURIComponent(`Corrección: ${name}`)}" target="_blank" rel="noreferrer">${esc(t(lang, 'report'))}</a>
     </p>`;
 }
 

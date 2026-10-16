@@ -1,6 +1,6 @@
 {
-  "name": "Globo Curioso",
-  "short_name": "Globo",
+  "name": "Giramundo",
+  "short_name": "Giramundo",
   "description": "Gira la Tierra y toca un país.",
   "start_url": "./",
   "scope": "./",

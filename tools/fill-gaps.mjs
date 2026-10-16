@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const UA = 'GloboCurioso/1.0 (https://github.com/vdm285/interactive-globe; educational static site; contact via github.com/vdm285)';
+const UA = 'Giramundo/1.0 (https://github.com/vdm285/giramundo; educational static site; contact via github.com/vdm285)';
 const cachePath = join(root, 'data/cache/wiki-pages.json');
 const facts = JSON.parse(await readFile(join(root, 'public/data/facts.json'), 'utf8'));
 let cache = {};

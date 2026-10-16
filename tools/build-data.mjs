@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { getCountry } from 'countries-and-timezones';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const UA = 'GloboCurioso/1.0 (https://github.com/vdm285/interactive-globe; educational static site)';
+const UA = 'Giramundo/1.0 (https://github.com/vdm285/giramundo; educational static site)';
 
 async function getJson(url) {
   const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' } });

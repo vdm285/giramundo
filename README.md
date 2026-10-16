@@ -14,7 +14,7 @@ npm run dev
 
 Open http://localhost:5173 . On a phone, use the address Vite prints under Network.
 
-The static build is `npm run build`. GitHub Pages publishes `main` to `https://vdm285.github.io/interactive-globe/`.
+The static build is `npm run build`. GitHub Pages publishes `main` to `https://vdm285.github.io/giramundo/`.
 
 ## What a tap shows
 

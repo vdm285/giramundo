@@ -14,10 +14,10 @@ const base = import.meta.env.BASE_URL;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const ui = {
-  lang: localStorage.getItem('globo-lang') || 'es',
-  kids: localStorage.getItem('globo-kids') === '1',
-  atlas: localStorage.getItem('globo-atlas') === '1',
-  spin: localStorage.getItem('globo-spin') !== '0',
+  lang: localStorage.getItem('giramundo-lang') || 'es',
+  kids: localStorage.getItem('giramundo-kids') === '1',
+  atlas: localStorage.getItem('giramundo-atlas') === '1',
+  spin: localStorage.getItem('giramundo-spin') !== '0',
   tab: 'historia',
   iso: 'MX',
   placeId: null,
@@ -43,7 +43,7 @@ const toastEl = () => document.getElementById('toast');
 
 function readHome() {
   try {
-    const saved = JSON.parse(localStorage.getItem('globo-home') || 'null');
+    const saved = JSON.parse(localStorage.getItem('giramundo-home') || 'null');
     if (saved?.lat != null) return saved;
   } catch { /* keep the default */ }
   return { lat: 19.4326, lon: -99.1332, label: 'Ciudad de México' };
@@ -77,10 +77,10 @@ function toast(message) {
 }
 
 function persist() {
-  localStorage.setItem('globo-lang', ui.lang);
-  localStorage.setItem('globo-kids', ui.kids ? '1' : '0');
-  localStorage.setItem('globo-atlas', ui.atlas ? '1' : '0');
-  localStorage.setItem('globo-spin', ui.spin ? '1' : '0');
+  localStorage.setItem('giramundo-lang', ui.lang);
+  localStorage.setItem('giramundo-kids', ui.kids ? '1' : '0');
+  localStorage.setItem('giramundo-atlas', ui.atlas ? '1' : '0');
+  localStorage.setItem('giramundo-spin', ui.spin ? '1' : '0');
 }
 
 function writeHash() {
@@ -154,7 +154,7 @@ function render() {
     });
   }
   const name = country?.name?.[ui.lang] || country?.name?.en;
-  document.title = name ? `${name} · Globo Curioso` : 'Globo Curioso';
+  document.title = name ? `${name} · Giramundo` : 'Giramundo';
   const live = document.getElementById('live');
   if (name && live.textContent !== name) live.textContent = name;
   writeHash();
@@ -315,7 +315,7 @@ function pinHit(x, y) {
 
 function onGlobeClick(event) {
   document.getElementById('coach').hidden = true;
-  localStorage.setItem('globo-coach', '1');
+  localStorage.setItem('giramundo-coach', '1');
   const pin = pinHit(event.clientX, event.clientY);
   const ll = globe.pickLatLon(event.clientX, event.clientY);
   const feature = pin ? featureOf(pin) : (ll && world.index.find(ll.lon, ll.lat));
@@ -384,7 +384,7 @@ function fillAbout() {
     <p>${esc(t(ui.lang, 'aboutP2'))}</p>
     <p>${esc(t(ui.lang, 'aboutP3'))}</p>
     <p>${esc(t(ui.lang, 'aboutP4'))}</p>
-    <p><a href="https://github.com/vdm285/interactive-globe" target="_blank" rel="noreferrer">github.com/vdm285/interactive-globe</a></p>`;
+    <p><a href="https://github.com/vdm285/giramundo" target="_blank" rel="noreferrer">github.com/vdm285/giramundo</a></p>`;
 }
 
 function speak(text) {
@@ -433,7 +433,7 @@ export async function boot() {
   if (hashed?.kids) ui.kids = true;
   if (hashed?.lang) ui.lang = hashed.lang;
 
-  if (localStorage.getItem('globo-coach') === '1') document.getElementById('coach').hidden = true;
+  if (localStorage.getItem('giramundo-coach') === '1') document.getElementById('coach').hidden = true;
 
   if (canWebGL()) {
     try {
@@ -478,6 +478,22 @@ export async function boot() {
       el.textContent = formatTime(el.parentElement.dataset.zone, ui.lang);
     }
   }, 15000);
+
+  window.addEventListener('hashchange', () => {
+    const next = parseHash(location.hash);
+    if (!next) return;
+    if (next.lang && next.lang !== ui.lang) { ui.lang = next.lang; persist(); today = null; ensureToday(); }
+    if (next.kids !== ui.kids) { ui.kids = next.kids; persist(); }
+    if (next.tab) ui.tab = next.tab;
+    const id = next.iso || next.placeId;
+    const country = id && (world.byIso.get(id) || world.byPlace.get(id));
+    if (country && (country.iso2 !== ui.iso || country.placeId !== ui.placeId)) {
+      ui.quiz = null;
+      selectById(country.iso2 || country.placeId);
+    } else {
+      render();
+    }
+  });
 
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
@@ -544,7 +560,7 @@ export async function boot() {
       speak(speechText({ lang: ui.lang, country: countryNow(), tab: ui.tab, story, kids: ui.kids }));
     } else if (action === 'share') {
       const url = `${location.origin}${location.pathname}${location.search}${location.hash}`;
-      const title = countryNow()?.name?.[ui.lang] || 'Globo Curioso';
+      const title = countryNow()?.name?.[ui.lang] || 'Giramundo';
       if (navigator.share) navigator.share({ title, url }).catch(() => {});
       else navigator.clipboard?.writeText(url).then(() => toast(t(ui.lang, 'copied')));
     } else if (action === 'compare') {
@@ -576,7 +592,7 @@ export async function boot() {
           lon: pos.coords.longitude,
           label: ui.lang === 'es' ? 'Tu ubicación' : 'Your location',
         };
-        localStorage.setItem('globo-home', JSON.stringify(home));
+        localStorage.setItem('giramundo-home', JSON.stringify(home));
         document.getElementById('more')?.close();
         globe?.flyTo(home.lat, home.lon, 2.3, 0);
         const feature = world.index.find(home.lon, home.lat);
@@ -586,7 +602,7 @@ export async function boot() {
       }, () => toast(t(ui.lang, 'locFail')), { enableHighAccuracy: false, timeout: 8000 });
     } else if (action === 'reset-home') {
       home = { lat: 19.4326, lon: -99.1332, label: 'Ciudad de México' };
-      localStorage.removeItem('globo-home');
+      localStorage.removeItem('giramundo-home');
       render();
     } else if (action === 'go-home') {
       document.getElementById('more')?.close();

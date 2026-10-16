@@ -1,4 +1,4 @@
-const CACHE = 'globo-curioso-v1';
+const CACHE = 'giramundo-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
