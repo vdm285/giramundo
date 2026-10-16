@@ -12,7 +12,13 @@ import { createGlobe } from '../globe/scene.js';
 import { createFlatMap } from '../flat/map.js';
 import { renderDossier } from '../dossier/dossier.js';
 import * as live from '../live/sources.js';
+import { createRadio, shortName } from '../live/radio.js';
+import { renderGame, renderPlayMenu, renderTourBar } from '../dossier/play.js';
+import { createPlay } from './play.js';
 import { createStore, readSetting, writeSetting } from './state.js';
+
+const radio = createRadio();
+let play = null;
 import { buildHash, parseHash } from './router.js';
 import { t } from './i18n.js';
 
@@ -168,7 +174,8 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   if (!country) return;
   const s = store.get();
   const feature = featureOf(country);
-  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null });
+  if (s.compare && s.compare !== id && id !== s.id) play?.clearCompare();
+  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false });
   writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
@@ -257,6 +264,21 @@ async function mountSurface(flat) {
 
 function onTap(event) {
   const s = store.get();
+  if (s.playmenu) store.set({ playmenu: false });
+  if (s.game && !s.game.over) {
+    const ll = surface.pickLatLon(event.clientX, event.clientY);
+    const feature = ll && world.index.find(ll.lon, ll.lat);
+    const country = countryOfFeature(feature);
+    if (country?.iso2) play.guess(country);
+    return;
+  }
+  if (s.picking) {
+    const ll = surface.pickLatLon(event.clientX, event.clientY);
+    const feature = ll && world.index.find(ll.lon, ll.lat);
+    const country = countryOfFeature(feature);
+    if (country?.iso2) play.setCompare(country.iso2);
+    return;
+  }
   const marker = surface.markerAt(event.clientX, event.clientY);
   if (marker?.kind === 'place') {
     store.set({ place: marker.place, section: 'lugares', collapsed: false });
@@ -369,6 +391,31 @@ async function on(action, payload) {
     }
     case 'about': document.getElementById('about').showModal(); break;
     case 'settings': document.getElementById('settings').showModal(); break;
+    case 'playmenu': store.set({ playmenu: !s.playmenu }); break;
+    case 'game': play.startGame(payload); break;
+    case 'game-next': play.nextRound(); break;
+    case 'game-giveup': play.giveUp(); break;
+    case 'game-end': play.endGame(); break;
+    case 'game-open': play.endGame({ open: true }); break;
+    case 'tour': play.startTour(payload); break;
+    case 'tour-prev': play.advanceTour(-1); break;
+    case 'tour-next': play.advanceTour(1); break;
+    case 'tour-toggle': play.toggleTour(); break;
+    case 'tour-stop': play.stopTour(); break;
+    case 'compare': play.startCompare(); toast(t(s.lang, 'comparePick')); document.getElementById('q')?.focus(); break;
+    case 'compare-clear': play.clearCompare(); break;
+    case 'radio-play': radio.play(payload.station, payload.iso2); break;
+    case 'radio-toggle': radio.toggle(); break;
+    case 'radio-stop': radio.stop(); break;
+    case 'radio-volume': radio.setVolume(payload); break;
+    case 'radio-next': {
+      const r = radio.state;
+      const list = r.iso2 ? world.radio?.[r.iso2] : null;
+      if (!list?.length) break;
+      const i = list.findIndex((x) => x.id === r.station?.id);
+      radio.play(list[(i + 1) % list.length], r.iso2);
+      break;
+    }
     case 'quality':
       store.set({ quality: payload });
       writeSetting('quality', payload);
@@ -399,6 +446,9 @@ async function on(action, payload) {
 const globeIcon = html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>`;
 const flatIcon = html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>`;
 const gearIcon = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>`;
+const playIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+const pauseIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>`;
+const nextIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l8-7zM16 5h2v14h-2z"/></svg>`;
 const searchIcon = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`;
 
 function shell(s) {
@@ -429,9 +479,12 @@ function shell(s) {
     <nav class="dock">
       <button @click=${() => on('surprise')}>${t(s.lang, 'surprise')}</button>
       ${s.collapsed && country ? html`<button @click=${() => on('collapse')}>${t(s.lang, 'expand')}</button>` : nothing}
+      <button @click=${() => on('playmenu')} aria-expanded=${s.playmenu}>${t(s.lang, 'play')}</button>
       <button @click=${() => on('about')}>${t(s.lang, 'about')}</button>
       <button class="gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
     </nav>
+    ${s.playmenu ? renderPlayMenu({ lang: s.lang, on, tours: play.tours(s.lang) }) : nothing}
+    ${s.tour ? renderTourBar({ lang: s.lang, tour: s.tour, on, progress: play.tourProgress() }) : nothing}
     <dialog id="settings" class="settings">
       <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
       <h2>${t(s.lang, 'settings')}</h2>
@@ -447,6 +500,25 @@ function shell(s) {
       <label class="row"><input type="checkbox" .checked=${s.spin} @change=${(e) => on('spin', e.target.checked)}> ${t(s.lang, 'spin')}</label>
       <label class="row">${t(s.lang, 'sunOffset')} <input type="range" min="-12" max="12" step="0.5" .value=${String(s.sun)} @input=${(e) => on('sun', Number(e.target.value))}> <button type="button" class="chip" @click=${() => on('sun', 0)}>${t(s.lang, 'sunNow')}</button></label>
     </dialog>
+    ${s.radio?.station ? (() => {
+      const r = s.radio;
+      const from = countryOf(r.iso2);
+      const busy = r.status === 'playing' || r.status === 'loading';
+      const status = r.status === 'loading' ? t(s.lang, 'radioLoading')
+        : r.status === 'error' ? t(s.lang, r.error === 'gesture' ? 'radioGesture' : 'radioError')
+          : r.status === 'playing' ? (from?.name?.[s.lang] || '') : (from?.name?.[s.lang] || '');
+      return html`<div class="player" role="region" aria-label=${t(s.lang, 'radio')}>
+        <button class="pbtn main" @click=${() => on('radio-toggle')} aria-label=${busy ? t(s.lang, 'radioPause') : t(s.lang, 'radioPlay')}>${busy ? pauseIcon : playIcon}</button>
+        ${from?.flag ? html`<img alt="" src=${base + from.flag}>` : nothing}
+        <div class="pinfo">
+          <button @click=${() => select(r.iso2)} title=${r.station.name}>${shortName(r.station.name)}</button>
+          <span class=${r.status === 'playing' ? 'live' : ''}>${status}</span>
+        </div>
+        <input type="range" min="0" max="1" step="0.05" .value=${String(r.volume)} aria-label=${t(s.lang, 'radioVolume')} @input=${(e) => on('radio-volume', Number(e.target.value))}>
+        <button class="pbtn" @click=${() => on('radio-next')} title=${t(s.lang, 'radioNext')} aria-label=${t(s.lang, 'radioNext')}>${nextIcon}</button>
+        <button class="pbtn" @click=${() => on('radio-stop')} title=${t(s.lang, 'radioStop')} aria-label=${t(s.lang, 'radioStop')}>×</button>
+      </div>`;
+    })() : nothing}
     ${legend ? html`
       <div class="legend">
         <strong>${legend.def.label?.[s.lang]}</strong>
@@ -460,7 +532,9 @@ function shell(s) {
     ${s.toast ? html`<p class="toast ${s.toast.actions ? 'ask' : ''}">${s.toast.message}${s.toast.actions ? s.toast.actions.map((a) => html`<button class=${a.quiet ? 'quiet' : ''} @click=${a.run}>${a.label}</button>`) : nothing}</p>` : nothing}
     <aside class="dossier" aria-live="off">
       <div class="dossier-scroll">
-        ${renderDossier({ ...s, country, world, places, on, base, feature: featureOf(country) })}
+        ${s.game
+          ? renderGame({ lang: s.lang, game: s.game, world, on, base })
+          : renderDossier({ ...s, country, world, places, on, base, feature: featureOf(country) })}
       </div>
     </aside>
     <dialog id="about">
@@ -504,6 +578,9 @@ function pickHit(c) {
   input.value = '';
   input.blur();
   store.set({ hits: [] });
+  const s = store.get();
+  if (s.picking && c.iso2) { play.setCompare(c.iso2); return; }
+  if (s.game && !s.game.over && c.iso2) { play.guess(c); return; }
   select(c.iso2 || c.placeId);
 }
 
@@ -609,8 +686,15 @@ export async function boot() {
     hits: [],
     toast: null,
     legend: null,
+    radio: radio.state,
+    game: null,
+    tour: null,
+    compare: null,
+    picking: false,
+    playmenu: false,
   });
   document.documentElement.lang = lang;
+  radio.subscribe((r) => store.set({ radio: r }));
 
   try {
     world = await loadWorld(base);
@@ -620,6 +704,8 @@ export async function boot() {
     bootError.textContent = t(lang, 'boot');
     return;
   }
+  play = createPlay({ store, world, surface: () => surface, select, flyToCountry });
+
   // Which country opens: the link wins; otherwise the reader's setting.
   let opening = null;
   if (hashed?.iso && world.byIso.get(hashed.iso)) opening = hashed.iso;
@@ -631,7 +717,8 @@ export async function boot() {
   const draw = () => {
     const s = store.get();
     document.body.classList.toggle('collapsed', s.collapsed);
-    document.body.classList.toggle('empty', !s.id);
+    document.body.classList.toggle('empty', !s.id && !s.game);
+    document.body.classList.toggle('picking', Boolean(s.picking));
     render(shell(s), ui);
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, lang: s.lang });
     if (location.hash !== next) history.replaceState(null, '', next);
@@ -640,6 +727,8 @@ export async function boot() {
   };
   store.subscribe(draw);
   draw();
+  // Debug handle for the console; not part of the public surface.
+  window.giramundo = { store, on, select, get world() { return world; }, get surface() { return surface; } };
 
   const webgl = canWebGL();
   if (!webgl && !store.get().flat) { store.set({ flat: true }); toast(t(lang, 'webglMissing')); }
@@ -668,6 +757,7 @@ export async function boot() {
     for (const el of document.querySelectorAll('.js-time[data-zone]')) el.textContent = formatTime(el.dataset.zone, lang);
   }, 15000);
   setInterval(syncMarkers, 900);
+  setInterval(() => { if (store.get().tour?.playing) store.set({ tick: Date.now() }); }, 400);
   watchPerformance();
 
   window.addEventListener('keydown', (event) => {

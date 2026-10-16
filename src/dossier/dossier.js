@@ -8,6 +8,7 @@ import { continentLabel, currencyLabel, displayCapital, formatCount, formatTime,
 import { disputeNote } from '../data/disputed.js';
 import { haversineKm } from '../geo/math.js';
 import { renderAhora, renderDatos, renderLugares, renderVer, renderWiki } from './sections.js';
+import { renderCompare } from './play.js';
 
 const HOME = { lat: 19.4326, lon: -99.1332 };
 
@@ -66,7 +67,7 @@ export function renderDossier(m) {
 
   return html`
     <div class="hero">
-      ${hero?.src ? html`<img src=${hero.src} alt="" @load=${(e) => e.target.classList.add('ready')} @error=${(e) => { e.target.remove(); }}>` : nothing}
+      ${hero?.src ? html`<img src=${hero.src} alt="" @load=${(e) => e.target.classList.add('ready')} @error=${(e) => { e.target.hidden = true; }}>` : nothing}
       <div class="hero-tools">
         <button title=${t(lang, 'collapse')} aria-label=${t(lang, 'collapse')} @click=${() => on('collapse')}>${icons.collapse}</button>
         <button title=${t(lang, 'share')} aria-label=${t(lang, 'share')} @click=${() => on('share')}>${icons.share}</button>
@@ -84,6 +85,7 @@ export function renderDossier(m) {
       ${SECTIONS.map((s) => html`<button role="tab" aria-selected=${s === section} @click=${() => on('section', s)}>${t(lang, `sec_${s}`)}</button>`)}
     </nav>
     <div class="body">
+      ${m.compare ? renderCompare(m) : nothing}
       ${!country.onMap && country.iso2 ? html`<div class="note"><p>${t(lang, 'small')}</p></div>` : nothing}
       ${dispute ? html`<aside class="note"><strong>${t(lang, 'disputed')}</strong><p>${dispute}</p></aside>` : nothing}
       ${section === 'historia' ? html`

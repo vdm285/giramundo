@@ -235,3 +235,87 @@ On Windows PowerShell: `$env:YOUTUBE_API_KEY = "AIza..."; npm run videos`.
    ```
 
    Run it with `continue-on-error: true` like the news step, and schedule it at most once a day (the quota is daily). Without the secret the step still succeeds and ships the seed.
+
+## Radio
+
+### What runs
+
+`npm run radio` → `node tools/build-radio.mjs`. Source: [Radio-Browser](https://www.radio-browser.info), a community-run directory of internet radio streams with a free, keyless JSON API (`https://api.radio-browser.info`).
+
+The script resolves `all.api.radio-browser.info` in DNS, reverse-resolves the addresses to the mirror names (`de1.api.radio-browser.info`, …) and picks one at random, as the API documentation asks; if DNS fails it falls back to `de1`. For every country in `public/data/facts.json` with an `iso2` it requests once:
+
+```
+GET https://<mirror>/json/stations/bycountrycodeexact/<ISO2>?order=votes&reverse=true&hidebroken=true&limit=100
+```
+
+Raw responses are cached under `data/cache/radio/` (gitignored) through `getJsonCached`. Politeness: at most 3 requests in flight, starts spaced 300 ms apart, retries via `fetchRetry`, the shared User-Agent on every request. A country whose request fails gets an empty list and an entry in `errors`; the run continues. A full run is 250 requests and about 80 s (also from the cache, because the pacing still applies).
+
+### Filters
+
+The site is served over HTTPS (GitHub Pages). A browser refuses to load an `http://` stream from an HTTPS page (mixed content), so only `https://` streams can ever play. Each station must pass all of:
+
+- `lastcheckok === 1` — Radio-Browser's own checker reached the stream recently.
+- `ssl_error === 0` — the certificate verifies.
+- `url_resolved` starts with `https://` and is not a playlist file (`.m3u`, `.pls`, `.asx`).
+- A codec the `<audio>` element decodes natively: `MP3`, `AAC`, `AAC+`, `OGG` (Vorbis/Opus). Stations whose codec the directory has not identified (`UNKNOWN`, empty) rank after those. Video codecs (`FLV`, `MP4`, `AAC,H.264`) are dropped.
+- HLS (`hls === 1` or a `.m3u8` URL) is used only when a country has nothing else, and is then marked `hls: true` so the player can treat it differently (Safari plays HLS natively; Chrome and Firefox need a library). On 2026-10-16 no country needed it.
+
+Survivors are ranked by `votes`, then `clickcount`, de-duplicated by name (case-insensitive) and by URL, and capped at 8 per country. Votes are community votes on the directory, not our ranking: this is "the most-voted HTTPS streams filed under this country", and the card should say so. Community filing is imperfect: a few stations sit under the wrong country or are themed internet stations rather than local broadcasters (Japan's list is mostly J-pop/anime internet radio; "Free FM Tokyo" streams from a Madrid host). We do not correct the directory; a wrong entry is fixed at the source (`https://www.radio-browser.info`, "edit" on the station) and picked up at the next run.
+
+### When
+
+On demand. The output is **committed** (`public/data/radio.json`, about 380 KB), so the site works offline and without hitting the directory. Refresh **monthly**: stream URLs rot, and `hidebroken` plus `lastcheckok` only reflect the directory's state on the day of the run. Run `RADIO_FRESH=1 npm run radio` (clears `data/cache/radio/` first; without it the cached responses from the previous run are reused and nothing changes), look at the summary, commit.
+
+The API answers browser requests with `Access-Control-Allow-Origin: *` (checked 2026-10-16 with an `Origin` header on GET and on an OPTIONS preflight; `User-Agent` is in `Access-Control-Allow-Headers`). So the site **may** later query the directory live, for example `/json/stations/byuuid/<id>` to fetch a station's current `favicon` and `url_resolved`, or `/json/url/<id>` to register a click (which is what keeps `clickcount` honest). The committed snapshot stays the primary source; a live query is an enhancement that must fail silently. Do not fall back to live queries for the whole list on every visit: the directory is run by volunteers.
+
+### Output
+
+`public/data/radio.json`:
+
+```json
+{
+  "built": "2026-10-16",
+  "source": "Radio-Browser (community directory, https://www.radio-browser.info)",
+  "attribution": "Station names and streams belong to their broadcasters. …",
+  "server": "de1.api.radio-browser.info",
+  "countries": {
+    "MX": [
+      { "id": "a0b40c3f-aede-46e9-b67f-38cd8b262936",
+        "name": "88.9 Noticias - 88.9 FM - XHM-FM - Grupo ACIR - Ciudad de México",
+        "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/XHMFMAAC_SC.aac",
+        "codec": "AAC+", "bitrate": 48,
+        "tags": ["88.9", "88.9 fm", "acir", "balada en español"],
+        "lang": "spanish",
+        "homepage": "https://www.iheart.com/live/889-noticias-6531/",
+        "ll": null,
+        "votes": 11783 }
+    ]
+  }
+}
+```
+
+- `id` is the Radio-Browser `stationuuid`; `url` is `url_resolved` (the stream, after the directory followed playlists and redirects). Some streams answer with one more redirect (StreamTheWorld, Zeno); the `<audio>` element follows it.
+- `codec` is as the directory spells it (`MP3`, `AAC`, `AAC+`, `OGG`), `null` when unknown; `bitrate` in kbit/s, `null` when 0 or unknown; `tags` at most 4, lowercase, as filed; `lang` is the directory's free-text language (`"spanish"`, sometimes `"spanish,english"`), `null` when empty; `homepage` is `null` unless it is an `http(s)` URL; `ll` is `[lat, lon]` rounded to 4 decimals or `null` (313 of 1,426 stations have one); `votes` is the directory's vote count.
+- `hls: true` appears only on HLS streams (none today).
+- `favicon` is **absent**: the file would exceed the 400 KB cap with it (the script drops favicons first, then cuts tags to 2, then lowers the per-country cap, and stops as soon as the file fits; today the first step was enough). If favicons matter, fetch them live by `id` (see "When") or raise `MAX_BYTES`.
+- `errors: { "<ISO2>": "message" }` appears only when a country's request failed. A country with no playable station has `[]`.
+
+Counts on 2026-10-16: 10,036 raw rows fetched; 1,426 playable stations in 240 countries; 140 countries have the full 8; 10 countries have none (BL BV EH GS HM MP NF PN TK WS: uninhabited or tiny territories, plus Western Sahara, Samoa and the Northern Marianas, whose few entries are all `http://`). Codecs kept: MP3 967, AAC 268, AAC+ 182, OGG 9.
+
+### Attribution and policy rules
+
+- Station names, logos and streams belong to their broadcasters. The site plays the public stream URL in an `<audio>` element and **never** re-hosts, records, re-streams or proxies audio. If a broadcaster's stream stops answering, it disappears at the next refresh; we do not look for a replacement URL ourselves.
+- Directory data is community-contributed to Radio-Browser. Credit it in text ("Directorio: Radio-Browser") and link `https://www.radio-browser.info`. Show the station name as filed and link its `homepage` when it has one.
+- The card must show `built` so a listener knows how old the list is, and must cope with `[]` (normal for small territories) and with a stream that fails to load (offer the next one or a short "no answer" line; never spin forever).
+- Say that the list is "most voted on Radio-Browser", not "the best stations" or "the national broadcaster". We do not rank or endorse stations.
+
+### Run locally
+
+```sh
+npm run radio                  # 250 requests, about 80 s; reuses data/cache/radio/ when present
+RADIO_FRESH=1 npm run radio    # clear the cache first: this is the monthly refresh
+```
+
+On Windows PowerShell: `$env:RADIO_FRESH = "1"; npm run radio`.
+
+Check the console summary (playable stations, countries with none, hls-only countries, raw codec mix), open `public/data/radio.json` and look at `MX`, `JP` and `FR`, and try two or three `url` values with `curl -sI -m 8 -L <url>` (expect `audio/mpeg`, `audio/aac`, `audio/aacp` or `audio/ogg`). Commit the file.

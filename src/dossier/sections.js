@@ -7,6 +7,7 @@ import { t, locale } from '../app/i18n.js';
 import { formatCompact, formatCount, formatTime, mainZone, sentences } from '../data/format.js';
 import { haversineKm } from '../geo/math.js';
 import { commonsPage, commonsThumb } from '../live/sources.js';
+import { shortName } from '../live/radio.js';
 
 const MAPS_KEY = import.meta.env.VITE_MAPS_EMBED_KEY || '';
 
@@ -37,6 +38,35 @@ function moneyCell(country, rates, lang) {
   const line1 = `1 USD = ${fmt(perUsd)} ${code}`;
   const line2 = code === 'MXN' ? '' : (mxn ? `1 ${code} = ${fmt(mxn / perUsd)} MXN` : '');
   return html`<div class="cell"><span>${t(lang, 'nowMoney')}</span><strong>${line1}</strong>${line2 ? html`<div class="small muted">${line2}</div>` : nothing}</div>`;
+}
+
+const playIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+const pauseIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>`;
+
+export function renderRadio(m) {
+  const { lang, country, world, radio, on } = m;
+  const stations = country.iso2 ? world.radio?.[country.iso2] : null;
+  if (!world.radio) return nothing;
+  return html`
+    <h2>${t(lang, 'radio')}</h2>
+    <p class="small muted">${t(lang, 'radioLead')}</p>
+    ${stations?.length ? html`<ul class="stations">${stations.map((s) => {
+      const current = radio?.station?.id === s.id;
+      const busy = current && (radio.status === 'playing' || radio.status === 'loading');
+      return html`<li aria-current=${current}>
+        <button class="play" @click=${() => on(current ? 'radio-toggle' : 'radio-play', { station: s, iso2: country.iso2 })} aria-label=${busy ? t(lang, 'radioPause') : t(lang, 'radioPlay')}>${busy ? pauseIcon : playIcon}</button>
+        ${s.favicon ? html`<img src=${s.favicon} alt="" loading="lazy" @error=${(e) => { e.target.hidden = true; }}>` : nothing}
+        <div style="min-width:0">
+          <div class="name" title=${s.name}>${shortName(s.name)}</div>
+          <div class="meta">${[...(s.tags || []).slice(0, 2), s.codec ? `${s.codec}${s.bitrate ? ` ${s.bitrate}k` : ''}` : ''].filter(Boolean).join(' · ')}
+            ${current && radio.status === 'loading' ? html` · ${t(lang, 'radioLoading')}` : nothing}
+            ${current && radio.status === 'error' ? html` · <span style="color:var(--coral)">${t(lang, radio.error === 'gesture' ? 'radioGesture' : 'radioError')}</span>` : nothing}
+          </div>
+        </div>
+      </li>`;
+    })}</ul>
+    <p class="small muted"><a href="https://www.radio-browser.info" target="_blank" rel="noreferrer">Radio-Browser</a> · ${lang === 'es' ? 'Las estaciones son de sus emisoras.' : 'Stations belong to their broadcasters.'}</p>`
+      : html`<p class="muted">${t(lang, 'radioNone')}</p>`}`;
 }
 
 export function renderAhora(m) {
@@ -73,6 +103,8 @@ export function renderAhora(m) {
       ${holidays.length ? html`<div class="cell"><span>${t(lang, 'nowHoliday')}</span><strong>${holidays[0].local}</strong>${holidays[0].name !== holidays[0].local ? html`<div class="small muted">${holidays[0].name}</div>` : nothing}</div>`
         : next ? html`<div class="cell"><span>${lang === 'es' ? 'Próximo feriado' : 'Next holiday'}</span><strong>${next.local}</strong><div class="small muted">${dateFmt.format(new Date(`${next.date}T12:00:00`))}</div></div>` : nothing}
     </div>
+
+    ${renderRadio(m)}
 
     <h2>${t(lang, 'nowHeadlines')}</h2>
     ${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang)}
@@ -146,7 +178,7 @@ export function renderLugares(m) {
   const { lang, places, on } = m;
   const sites = places?.heritage || [];
   if (!sites.length) return html`<p class="muted">${t(lang, 'placesNone')}</p>`;
-  const sel = m.content.place;
+  const sel = m.place;
   return html`
     <h2>${t(lang, 'placesHeritage')} <span class="muted small">· ${sites.length}</span></h2>
     ${sel ? html`

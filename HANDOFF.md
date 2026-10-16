@@ -11,6 +11,9 @@ The state of the code after the rebuild. `docs/VISION.md` is the plan; this file
 - **Router** (`src/app/router.js`): `#mx`, `#jp/ver/en`, `#somaliland/ahora`. Hash changes after load are followed.
 - **Pipelines** (`docs/PIPELINES.md`): headlines every six hours at deploy time (not committed); places from Wikidata (committed, 174 countries with heritage, 1,172 sites); videos via YouTube Data API when the `YOUTUBE_API_KEY` secret exists, else a committed seed of 49 verified videos for 16 countries.
 - **Service worker**: network first for the shell and JSON, cache first for textures, fonts and flags.
+- **Settings** (gear in the dock): visual quality (Automatic, Full, Simple, flat map), opening country (country of the day, home, where you are, random, last seen), home country, idle spin, sun offset. Automatic quality drops to Simple before offering the flat map when the frame rate stays under 20.
+- **Local radio** (`src/live/radio.js`, block in Ahora): up to 8 HTTPS streams per country from the Radio-Browser snapshot (`public/data/radio.json`, 240 countries); one shared audio element and a mini player (bottom left) that keeps playing while you wander; 15 s watchdog marks a dead stream.
+- **Play** (`src/app/play.js`, `src/app/tours.js`, `src/dossier/play.js`; "Jugar" in the dock): guess-the-country with five rounds, guesses painted by distance (red near, blue far) with km and heading, two pools (big countries, all); tours with a progress bar, prev/pause/next, an arc between stops, and heritage tours that open each site's detail; compare with another country (tap or search) showing an arc and side-by-side facts and indicators.
 
 ## Decisions
 

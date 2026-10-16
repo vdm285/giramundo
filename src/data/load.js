@@ -58,13 +58,14 @@ function shadeCountries(countries) {
 
 export async function loadWorld(base) {
   const optional = (url) => fetch(url).then((res) => (res.ok ? res.json() : null)).catch(() => null);
-  const [facts, topo, indicators, pophistory, places, videoSeed] = await Promise.all([
+  const [facts, topo, indicators, pophistory, places, videoSeed, radio] = await Promise.all([
     fetch(`${base}data/facts.json`).then((res) => res.json()),
     fetch(`${base}data/countries-50m.json`).then((res) => res.json()),
     optional(`${base}data/indicators.json`),
     optional(`${base}data/pophistory.json`),
     optional(`${base}data/places.json`),
     optional(`${base}data/videos-seed.json`),
+    optional(`${base}data/radio.json`),
   ]);
   const countries = facts.countries.map((country) => ({ ...country, onMap: false }));
   const byIso = new Map(countries.map((c) => [c.iso2, c]));
@@ -116,6 +117,7 @@ export async function loadWorld(base) {
     pophistory: pophistory || null,
     places: places?.countries || null,
     videoSeed: videoSeed || null,
+    radio: radio?.countries || null,
     countries: all,
     byIso,
     byPlace: new Map(specials.map((s) => [s.placeId, s])),
