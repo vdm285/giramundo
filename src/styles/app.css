@@ -14,7 +14,7 @@
   --glass-line: rgba(255, 255, 255, 0.13);
   --display: "Fraunces", Georgia, serif;
   --body: "Outfit", "Segoe UI", system-ui, sans-serif;
-  --dossier-w: min(500px, 40vw);
+  --dossier-w: min(560px, 44vw);
   --radius: 22px;
   color-scheme: dark;
 }
@@ -444,6 +444,18 @@ body:not(.collapsed):not(.empty) .tourbar { left: calc((100% - var(--dossier-w) 
 .crow strong { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crow img { width: 22px; height: 15px; object-fit: cover; border-radius: 2px; vertical-align: -2px; margin-right: 4px; }
 .picking .dossier { opacity: 0.4; }
+
+/* Full-card mode: the dossier takes most of the width; the globe stays at the left edge. */
+body.wide:not(.collapsed) { --dossier-w: min(1100px, 72vw); }
+body.wide .people { grid-template-columns: repeat(4, 1fr); }
+body.wide .places { grid-template-columns: repeat(3, 1fr); }
+body.wide .hero { height: 260px; }
+body.wide .body { padding: 20px 28px 28px; }
+body.wide .facts { grid-template-columns: repeat(4, 1fr); }
+body.wide .now-grid { grid-template-columns: repeat(3, 1fr); }
+.yt { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 700; color: var(--accent-ink); text-decoration: none; }
+.place .yt { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.55); color: #fff; border-radius: 999px; padding: 3px 8px; z-index: 1; }
+.place .yt:hover { background: var(--coral); }
 .dock .gear { padding: 0 12px; display: inline-flex; align-items: center; }
 .dock .gear svg { width: 18px; height: 18px; }
 

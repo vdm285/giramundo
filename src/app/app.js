@@ -476,6 +476,10 @@ async function on(action, payload) {
     case 'compare': play.startCompare(); toast(t(s.lang, 'comparePick')); document.getElementById('q')?.focus(); break;
     case 'compare-clear': play.clearCompare(); break;
     case 'city': openCity(payload); break;
+    case 'wide':
+      store.set({ wide: !s.wide, collapsed: false });
+      writeSetting('wide', !s.wide);
+      break;
     case 'city-close': closeCity(); break;
     case 'radio-play': radio.play(payload.station, payload.iso2); break;
     case 'radio-toggle': radio.toggle(); break;
@@ -769,6 +773,7 @@ export async function boot() {
     picking: false,
     playmenu: false,
     city: null,
+    wide: readSetting('wide', false),
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
@@ -793,6 +798,7 @@ export async function boot() {
     document.body.classList.toggle('collapsed', s.collapsed);
     document.body.classList.toggle('empty', !s.id && !s.game);
     document.body.classList.toggle('picking', Boolean(s.picking));
+    document.body.classList.toggle('wide', Boolean(s.wide));
     render(shell(s), ui);
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
     if (location.hash !== next) history.replaceState(null, '', next);

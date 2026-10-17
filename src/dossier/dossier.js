@@ -71,6 +71,11 @@ export function renderDossier(m) {
       <div class="hero-tools">
         <button title=${t(lang, 'collapse')} aria-label=${t(lang, 'collapse')} @click=${() => on('collapse')}>${icons.collapse}</button>
         <button title=${t(lang, 'share')} aria-label=${t(lang, 'share')} @click=${() => on('share')}>${icons.share}</button>
+        <button title=${t(lang, m.wide ? 'shrink' : 'expand')} aria-label=${t(lang, m.wide ? 'shrink' : 'expand')} aria-pressed=${Boolean(m.wide)} @click=${() => on('wide')}>
+          ${m.wide
+            ? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 20v-5h5M4 15h5v5M20 9h-5V4"/></svg>`
+            : html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`}
+        </button>
       </div>
       ${hero?.credit ? html`<a class="credit" href=${hero.link} target="_blank" rel="noreferrer">${hero.credit}</a>` : nothing}
       <div class="title">

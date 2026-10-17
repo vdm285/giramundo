@@ -213,6 +213,7 @@ function renderCulture(m) {
           <strong>${p.label?.[lang] || p.label?.en}</strong>
           <span>${[p.job?.[lang] || p.job?.en || '', p.born ? `${p.born}${p.died ? `–${p.died}` : ''}` : ''].filter(Boolean).join(' · ')}</span>
         </a>`)}</div>
+      <div class="chips" style="margin-top:8px">${people.slice(0, 6).map((p) => html`<a class="chip yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${p.label?.en || p.label?.es} ${lang === 'es' ? 'documental' : 'documentary'}`)}`} target="_blank" rel="noreferrer">▶ ${p.label?.[lang] || p.label?.en}</a>`)}</div>
       <p class="small muted">${t(lang, 'peopleNote')}</p>` : nothing}`;
 }
 
@@ -220,11 +221,16 @@ function dishList(dishes, lang) {
   if (!dishes.length) return nothing;
   return html`
     <h3>${lang === 'es' ? 'Platos típicos' : 'Typical dishes'}</h3>
-    <div class="places">${dishes.slice(0, 6).map((d) => html`
-      <a class="place ${d.image ? '' : 'noimg'}" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">
+    <div class="places">${dishes.slice(0, 6).map((d) => {
+      const name = d.label?.[lang] || d.label?.en || '';
+      const q = lang === 'es' ? `${name} receta` : `${name} recipe`;
+      return html`
+      <div class="place ${d.image ? '' : 'noimg'}" style="cursor:default">
+        <a class="yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`} target="_blank" rel="noreferrer" title=${t(lang, 'ytVideo')}>▶ YouTube</a>
         ${d.image ? html`<img loading="lazy" src=${commonsThumb(d.image, 480)} alt="">` : nothing}
-        <div class="cap">${d.label?.[lang] || d.label?.en}</div>
-      </a>`)}</div>
+        <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}</a>
+      </div>`;
+    })}</div>
     <p class="small muted">Wikidata · Wikimedia Commons</p>`;
 }
 
@@ -244,6 +250,7 @@ export function renderLugares(m) {
         ${sel.desc?.[lang] || sel.desc?.en ? html`<p>${sel.desc?.[lang] || sel.desc?.en}</p>` : nothing}
         <p class="small muted">${sel.year ? `${t(lang, 'placesInscribed')} ${sel.year} · ` : ''}UNESCO · Wikidata${sel.image ? html` · <a href=${commonsPage(sel.image)} target="_blank" rel="noreferrer">Commons</a>` : nothing}</p>
         <p class="links">
+          <a href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${sel.label?.en || sel.label?.es} 4K`)}`} target="_blank" rel="noreferrer">▶ ${t(lang, 'ytVideo')}</a>
           ${sel.wiki?.[lang] || sel.wiki?.en ? html`<a href=${sel.wiki?.[lang] || sel.wiki?.en} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a>` : nothing}
           ${sel.ll ? html`<a href=${`https://www.google.com/maps/search/?api=1&query=${sel.ll[0]},${sel.ll[1]}`} target="_blank" rel="noreferrer">Google Maps</a>` : nothing}
         </p>
