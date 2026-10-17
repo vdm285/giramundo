@@ -50,6 +50,12 @@ The state of the code after the rebuild. `docs/VISION.md` is the plan; this file
 3. Create a Google Maps Embed API key restricted to `https://vdm285.github.io/*` and set it as the `VITE_MAPS_EMBED_KEY` repository variable (already read by the workflow).
 4. Rename the local folder to `D:\_GitHub\giramundo` to match the repository (one `Rename-Item` in PowerShell with nothing open in the folder).
 
+## Evening of 2026-10-16, in short
+
+- Victor's hands-on verdict: the Simple globe is perfectly smooth in Chrome and in the desktop pane; Full and Atlas lag in both. Technical review pending (remind him about `chrome://gpu`). Candidate next steps: default to Simple on first visit, or cut the Full shader's cost (fewer texture reads, skip the 4-tap id blend when far), then re-test.
+- Added: wider dossier, full-card mode (expand button in the hero), YouTube search links on every dish, heritage site and person. Victor wants hand-curated, good-quality videos behind every clickable thing eventually; that is a pipeline job (Data API or manual seed with oEmbed checks), not search links.
+- Requested for later: compare-and-contrast between two countries inside the same section (the current compare block is facts only).
+
 ## If you continue
 
 1. Agreed next step: feature-by-feature review cards with Victor, starting with Ahora (news order, radio curation, weather, background block), then Ver, then Play. Apply answers one feature at a time.
