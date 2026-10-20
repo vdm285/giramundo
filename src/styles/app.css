@@ -173,6 +173,9 @@ body.empty .dossier { display: none; }
 }
 .hero img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity 600ms; }
 .hero img.ready { opacity: 1; }
+.hero img.off { opacity: 0; transition: opacity 1400ms; }
+.hero img.on { opacity: 1; transition: opacity 1400ms; }
+.hero img + img { position: absolute; inset: 0; }
 .hero img[hidden], .stations img[hidden] { display: none; }
 .hero::after {
   content: ""; position: absolute; inset: 0;

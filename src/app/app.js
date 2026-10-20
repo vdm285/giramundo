@@ -277,7 +277,7 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   const s = store.get();
   const feature = featureOf(country);
   if (s.compare && s.compare !== id && id !== s.id) play?.clearCompare();
-  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0 });
+  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0, heroIdx: 0 });
   writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
@@ -976,6 +976,14 @@ export async function boot({ wire = false } = {}) {
   }, 15000);
   setInterval(syncMarkers, 900);
   setInterval(() => { if (store.get().tour?.playing) store.set({ tick: Date.now() }); }, 400);
+  // Hero slideshow: the next World Heritage photo every 6 s while the dossier is open.
+  setInterval(() => {
+    const s = store.get();
+    if (s.collapsed || s.game || s.city || document.visibilityState !== 'visible') return;
+    const c = countryOf(s.id);
+    const n = c?.iso2 ? (world.places?.[c.iso2]?.heritage || []).filter((h) => h.image).slice(0, 5).length : 0;
+    if (n >= 2) store.set({ heroIdx: ((s.heroIdx || 0) + 1) % n });
+  }, 6000);
   // Banknote slideshow: one bill every 4 s, paused a while after a manual step.
   setInterval(() => {
     const s = store.get();

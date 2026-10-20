@@ -209,7 +209,16 @@ export function renderDossier(m) {
 
   return html`
     <div class="hero">
-      ${hero?.src ? html`<img src=${hero.src} alt="" @load=${(e) => e.target.classList.add('ready')} @error=${(e) => { e.target.hidden = true; }}>` : nothing}
+      ${(() => {
+        // A slow slideshow of up to five World Heritage photos, cross-fading;
+        // the single hero photo when there are not enough.
+        const shots = (m.places?.heritage || []).filter((h) => h.image).slice(0, 5);
+        if (shots.length >= 2) {
+          const idx = (m.heroIdx || 0) % shots.length;
+          return shots.map((h, i) => html`<img class=${i === idx ? 'ready on' : 'off'} src=${commonsThumb(h.image, 1000)} alt="" loading=${i === idx ? 'eager' : 'lazy'} @error=${(e) => { e.target.hidden = true; }}>`);
+        }
+        return hero?.src ? html`<img src=${hero.src} alt="" @load=${(e) => e.target.classList.add('ready')} @error=${(e) => { e.target.hidden = true; }}>` : nothing;
+      })()}
       <div class="hero-tools">
         <button title=${t(lang, 'collapse')} aria-label=${t(lang, 'collapse')} @click=${() => on('collapse')}>${icons.collapse}</button>
         <button title=${t(lang, 'share')} aria-label=${t(lang, 'share')} @click=${() => on('share')}>${icons.share}</button>
@@ -227,7 +236,14 @@ export function renderDossier(m) {
             : html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`}
         </button>
       </div>
-      ${hero?.credit ? html`<a class="credit" href=${hero.link} target="_blank" rel="noreferrer">${hero.credit}</a>` : nothing}
+      ${(() => {
+        const shots = (m.places?.heritage || []).filter((h) => h.image).slice(0, 5);
+        if (shots.length >= 2) {
+          const h = shots[(m.heroIdx || 0) % shots.length];
+          return html`<a class="credit" href=${commonsPage(h.image)} target="_blank" rel="noreferrer">${h.label?.[lang] || h.label?.en || 'Wikimedia Commons'}</a>`;
+        }
+        return hero?.credit ? html`<a class="credit" href=${hero.link} target="_blank" rel="noreferrer">${hero.credit}</a>` : nothing;
+      })()}
       <div class="title">
         ${flag}
         <div>
