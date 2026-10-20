@@ -99,6 +99,7 @@ export function createFlatMap(canvas, world, { base }) {
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     view.dist = clampDist(view.dist);
+    cache = null;
     dirty = true;
   }
 
@@ -136,59 +137,98 @@ export function createFlatMap(canvas, world, { base }) {
     return { x: rect.left + x, y: rect.top + y, depth: 1 };
   }
 
-  function draw() {
-    setup();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#05070c';
-    ctx.fillRect(0, 0, w, h);
-    const k = ppd();
-    const worldW = 360 * k;
-    const [x0, y0] = projection([-180, 90]);
-    const mapH = 180 * k;
-    // Copies of the world so panning wraps.
+  // The static layer (base image or fills, graticule, borders, night mask) is
+  // expensive: 250 vector outlines. It is rendered once into an offscreen
+  // canvas with a margin around the viewport and reused while panning; it is
+  // re-rendered only when zoom, style, data colors or the margin run out.
+  let cache = null;
+  let colorVersion = 0;
+
+  function worldCopies(x0, worldW, width) {
     const copies = [];
     for (let off = -1; off <= 1; off++) {
       const x = x0 + off * worldW;
-      if (x + worldW < -50 || x > w + 50) continue;
+      if (x + worldW < -50 || x > width + 50) continue;
       copies.push(off);
     }
-    for (const off of copies) {
-      const x = x0 + off * worldW;
-      ctx.save();
-      ctx.translate(off * worldW, 0);
+    return copies;
+  }
+
+  function renderStatic(k, x0, y0) {
+    const margin = Math.round(Math.max(w, h) * 0.6);
+    const cw = w + 2 * margin;
+    const ch = h + 2 * margin;
+    if (!cache || cache.canvas.width !== Math.round(cw * dpr) || cache.canvas.height !== Math.round(ch * dpr)) {
+      const canvas2 = document.createElement('canvas');
+      canvas2.width = Math.round(cw * dpr);
+      canvas2.height = Math.round(ch * dpr);
+      cache = { canvas: canvas2 };
+    }
+    const c = cache.canvas.getContext('2d');
+    const cpath = geoPath(projection, c);
+    c.setTransform(dpr, 0, 0, dpr, margin * dpr, margin * dpr);
+    c.fillStyle = '#05070c';
+    c.fillRect(-margin, -margin, cw, ch);
+    const worldW = 360 * k;
+    const mapH = 180 * k;
+    if (style === 'earth' && Date.now() - nightAt > 60000) paintNight();
+    for (const off of worldCopies(x0, worldW, w + 2 * margin)) {
+      c.save();
+      c.translate(off * worldW, 0);
       if (style === 'earth') {
-        if (day.complete && day.naturalWidth) ctx.drawImage(day, x0, y0, worldW, mapH);
-        else { ctx.fillStyle = '#10243b'; ctx.fillRect(x0, y0, worldW, mapH); }
-        if (Date.now() - nightAt > 60000) paintNight();
-        ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(night, x0, y0, worldW, mapH);
+        if (day.complete && day.naturalWidth) c.drawImage(day, x0, y0, worldW, mapH);
+        else { c.fillStyle = '#10243b'; c.fillRect(x0, y0, worldW, mapH); }
+        c.imageSmoothingEnabled = true;
+        c.drawImage(night, x0, y0, worldW, mapH);
       } else {
-        ctx.fillStyle = style === 'data' ? '#0d1522' : '#c7d9e3';
-        ctx.fillRect(x0, y0, worldW, mapH);
+        c.fillStyle = style === 'data' ? '#0d1522' : '#c7d9e3';
+        c.fillRect(x0, y0, worldW, mapH);
         if (style === 'atlas') {
-          ctx.strokeStyle = 'rgba(36,48,58,0.18)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          for (let lon = -180; lon <= 180; lon += 15) path({ type: 'LineString', coordinates: [[lon, -90], [lon, 90]] });
-          for (let lat = -75; lat <= 75; lat += 15) path({ type: 'LineString', coordinates: [[-180, lat], [180, lat]] });
-          ctx.stroke();
+          c.strokeStyle = 'rgba(36,48,58,0.18)';
+          c.lineWidth = 1;
+          c.beginPath();
+          for (let lon = -180; lon <= 180; lon += 15) cpath({ type: 'LineString', coordinates: [[lon, -90], [lon, 90]] });
+          for (let lat = -75; lat <= 75; lat += 15) cpath({ type: 'LineString', coordinates: [[-180, lat], [180, lat]] });
+          c.stroke();
         }
         for (const f of world.features) {
           let fill = f.properties.fill || '#e6d7c3';
           if (style === 'data') fill = (colorFor && colorFor(f)) || '#2a2e35';
-          ctx.fillStyle = fill;
-          ctx.beginPath();
-          path(f);
-          ctx.fill();
+          c.fillStyle = fill;
+          c.beginPath();
+          cpath(f);
+          c.fill();
         }
       }
-      // Borders.
-      ctx.strokeStyle = style === 'atlas' ? 'rgba(48,36,28,0.7)' : style === 'data' ? 'rgba(160,175,195,0.35)' : 'rgba(255,255,255,0.22)';
-      ctx.lineWidth = style === 'atlas' ? 1 : 0.8;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      for (const f of world.features) path(f);
-      ctx.stroke();
+      c.strokeStyle = style === 'atlas' ? 'rgba(48,36,28,0.7)' : style === 'data' ? 'rgba(160,175,195,0.35)' : 'rgba(255,255,255,0.22)';
+      c.lineWidth = style === 'atlas' ? 1 : 0.8;
+      c.lineJoin = 'round';
+      c.beginPath();
+      for (const f of world.features) cpath(f);
+      c.stroke();
+      c.restore();
+    }
+    Object.assign(cache, { k, x0, y0, style, margin, cw, ch, colorVersion, nightAt, dayReady: Boolean(day.complete && day.naturalWidth) });
+  }
+
+  function draw() {
+    setup();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const k = ppd();
+    const worldW = 360 * k;
+    const [x0, y0] = projection([-180, 90]);
+    const dayReady = Boolean(day.complete && day.naturalWidth);
+    const fresh = cache && cache.k === k && cache.style === style && cache.colorVersion === colorVersion
+      && cache.dayReady === dayReady && (style !== 'earth' || Date.now() - cache.nightAt < 60000)
+      && Math.abs(x0 - cache.x0) <= cache.margin && Math.abs(y0 - cache.y0) <= cache.margin;
+    if (!fresh) renderStatic(k, x0, y0);
+    ctx.drawImage(cache.canvas, 0, 0, cache.canvas.width, cache.canvas.height,
+      (x0 - cache.x0) - cache.margin, (y0 - cache.y0) - cache.margin, cache.cw, cache.ch);
+    const copies = worldCopies(x0, worldW, w);
+    for (const off of copies) {
+      const x = x0 + off * worldW;
+      ctx.save();
+      ctx.translate(off * worldW, 0);
       // Hover and selection.
       if (hover && hover !== selected) {
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
@@ -327,7 +367,7 @@ export function createFlatMap(canvas, world, { base }) {
     setSelected(f) { selected = f; dirty = true; },
     setHover(f) { if (hover !== f) { hover = f; dirty = true; } },
     setCompare() {},
-    setDataColors(fn) { colorFor = fn; dirty = true; },
+    setDataColors(fn) { colorFor = fn; colorVersion += 1; dirty = true; },
     setMarkers(list) { markers = list; dirty = true; },
     setBeacon(lat, lon) { beacon = lat == null ? null : { lat, lon }; dirty = true; },
     addArc() { return null; },
