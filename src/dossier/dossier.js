@@ -16,12 +16,15 @@ export function splitBills(bills) {
   for (const b of bills) {
     const title = `${b.file || ''} ${b.series || ''}`;
     const years = [...title.matchAll(/\b(1[6-9]\d\d|20\d\d)\b/g)].map((x) => Number(x[1]));
-    const oldest = years.length ? Math.max(...years) : null;
-    const flagged = /specimen|histor|antigu|\bold\b|obsolet|demonetiz|emergency|provisional|revoluci|local issue/i.test(title);
-    if (b.historical || flagged || (oldest != null && oldest < 1990)) old.push(b);
+    const year = b.year || (years.length ? Math.max(...years) : null);
+    const flagged = /specimen|histor|antigu|\bold\b|obsolet|demonetiz|emergency|provisional|revoluci|local issue|banco yucateco|comisi[oó]n reguladora/i.test(title);
+    if (b.historical || flagged || (year != null && year < 1990)) old.push(b);
     else current.push(b);
   }
-  return { current, old };
+  // "Uncertain" when nothing proves a note from this century exists in the set:
+  // the card then says Commons may not hold the current series.
+  const uncertain = !bills.some((b) => (b.year && b.year >= 2000) || /current|polymer|europa|new|20[12]\d/i.test(`${b.series || ''} ${b.file || ''}`));
+  return { current, old, uncertain };
 }
 
 // Real banknotes and coins from Wikimedia Commons, as a slideshow sized like
@@ -31,8 +34,9 @@ function renderMoney(m) {
   const code = country.currencies?.[0]?.code;
   const cur = code ? money?.[code] : null;
   if (!cur) return nothing;
-  const { current, old } = splitBills(cur.banknotes || []);
+  const { current, old, uncertain } = splitBills(cur.banknotes || []);
   const bills = m.moneyOld ? old : (current.length ? current : old);
+  const uncertainNote = uncertain && bills.length ? html`<p class="small muted" style="margin:8px 0 0">${t(lang, 'moneyUncertain')}</p>` : nothing;
   const idx = bills.length ? (m.moneyIdx || 0) % bills.length : 0;
   const oldToggle = old.length && current.length
     ? html`<button class="chip" style="margin-top:6px" @click=${() => on('money-old')}>${m.moneyOld ? t(lang, 'moneyOldHide') : `${t(lang, 'moneyOld')} · ${old.length}`}</button>`
@@ -52,9 +56,10 @@ function renderMoney(m) {
       ${bills.length > 1 ? html`<div class="dots">${bills.map((_, i) => html`<i class=${i === idx ? 'on' : ''}></i>`)}</div>
         <button class="step l" aria-label="prev" @click=${() => on('money-step', -1)}>‹</button>
         <button class="step r" aria-label="next" @click=${() => on('money-step', 1)}>›</button>` : nothing}
-      <div class="label"><span><b>${bill.denomination ? `${bill.denomination} ` : ''}${name}</b>${rate ? html`<br>${rate}` : nothing}</span>
+      <div class="label"><span><b>${bill.denomination ? `${bill.denomination} ` : ''}${name}</b>${bill.year || bill.series ? ` · ${[bill.series, bill.year].filter(Boolean).join(' ')}` : ''}${rate ? html`<br>${rate}` : nothing}</span>
         <a class="credit" style="position:static;background:none;padding:0" href=${commonsPage(bill.file)} target="_blank" rel="noreferrer">${bill.license || 'Commons'}</a></div>
     </div>
+    ${uncertainNote}
     ${oldToggle}
     ${cur.coins?.length ? html`<div class="coins">${cur.coins.slice(0, 8).map((c) => html`<a href=${commonsPage(c.file)} target="_blank" rel="noreferrer" title=${`${c.denomination || ''} · ${c.license || ''}`}><img loading="lazy" src=${commonsThumb(c.file, 160)} alt=""></a>`)}</div>` : nothing}
     ${renderConverter(m, code, name, perUsd)}

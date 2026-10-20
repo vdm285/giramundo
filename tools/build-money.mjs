@@ -23,7 +23,7 @@
 // Politeness: pool of 2, 400 ms between request starts, retries and UA from
 // net.mjs, every API response cached under data/cache/commons/ (and
 // data/cache/wikidata/ for the SPARQL). Re-run: npm run money
-// MONEY_ONLY=MXN,JPY npm run money   limits to a few codes (debug)
+// MONEY_ONLY=MXN,JPY npm run money   limits to a few codes; MONEY_DEBUG=1 prints the ranking
 
 import { writeFile, mkdir, access } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -35,10 +35,12 @@ const MAX_BYTES = 600 * 1024;
 const MAX_NOTES = 8;
 const MAX_COINS = 6;
 const MIN_WIDTH = 600;
+const MIN_WIDTH_CURRENT = 560;
 const SPACING_MS = 400;
 const POOL = 2;
 const API = 'https://commons.wikimedia.org/w/api.php';
 const ONLY = process.env.MONEY_ONLY ? new Set(process.env.MONEY_ONLY.split(',')) : null;
+const DEBUG = !!process.env.MONEY_DEBUG;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
@@ -153,7 +155,7 @@ console.log(`Wikidata: ${wd.size} codes matched (missing: ${codeList.filter((c) 
 const KIND = {
   banknotes: {
     cat: /banknote|paper money|billete|c[eé]dula|\bnotes?\b/i,
-    word: /banknote|billete|c[eé]dula|\bbill\b|\bnotes?\b|\bbillet|geldschein|schein|banconota|札|券|紙幣/i,
+    word: /banknote|banknot|billete|c[eé]dula|\bbill\b|\bnotes?\b|\bnotas?\b|\bbillet|biljet|bankjegy|bankovka|\bsedel|\bseddel|geldschein|schein|banconota|банкнот|札|券|紙幣/i,
     search: ['banknote', 'billete'],
     max: MAX_NOTES,
   },
@@ -166,7 +168,7 @@ const KIND = {
 };
 
 // Subcategories that are not the circulating money itself.
-const BAD_CAT = /fantasy|imitation|counterfeit|forger|specimen|commemorative|bullion|token|charm|hoard|pattern|mother coin|countermark|postcard|museum|collection|replacement|signature|security feature|people|in art|\bsign\b|machine|exchange|bureau|mint\b|mints\b|\blocal\b|coloni|confederate|revolution|emergency|overstamp|by (state|period|metal|shape|inscription|collection|type|year|date|mint|country|artist|designer|engraver|author|face value|denomination)|unknown|proposal|reverse sides|straps|shred|gold coins|silver coins|on (banknotes|coins|money|stamps)|charit|wash|payment|chart|stamp|books|trays|crest|unidentified|operated|trees|pipe|cheque|check|certificate|medal|military|notgeld|scrip|private|regional|obsolete|\bold\b|ancient|medieval|\(1[0-8]\d\d|\(19[0-4]\d|printing|engrav|depict|portrait|watermark|holder|wallet|error|misprint|cancelled|uncut|sheets?\b|cut\b|destr|burn|damaged|folded|origami|jewel|art\b|advertis|propaganda|film|video|drawing|illustration|logo/i;
+const BAD_CAT = /fantasy|imitation|counterfeit|forger|specimen|commemorative|bullion|token|charm|hoard|pattern|mother coin|countermark|postcard|museum|collection|replacement|signature|security feature|people (on|depicted|in)|in art|\bsign\b|machine|exchange|bureau|mint\b|mints\b|\blocal\b|coloni|confederate|revolution|emergency|overstamp|by (state|period|metal|shape|inscription|collection|type|year|date|mint|country|artist|designer|engraver|author|face value|denomination)|unknown|proposal|reverse sides|straps|shred|gold coins|silver coins|on (banknotes|coins|money|stamps)|charit|wash|payment|chart|stamp|books|trays|crest|unidentified|operated|trees|pipe|cheque|check|certificate|medal|military|notgeld|scrip|private|regional|obsolete|\bold\b|ancient|medieval|\(1[0-8]\d\d|\(19[0-4]\d|printing|engrav|depict|portrait|watermark|holder|wallet|error|misprint|cancelled|uncut|sheets?\b|cut\b|destr|burn|damaged|folded|origami|jewel|art\b|advertis|propaganda|film|video|drawing|illustration|logo/i;
 
 async function members(cat, type) {
   const data = await commons({ action: 'query', list: 'categorymembers', cmtitle: `Category:${cat}`, cmtype: type, cmlimit: '200' });
@@ -214,7 +216,8 @@ function unitNoun(e) {
   if (es.length && !nouns.size) nouns.add(es[0]);
   return [...nouns].filter((w) => w.length > 2);
 }
-const unitWords = (code, e) => unitNoun(e);
+// For titles: the nouns plus the ISO code itself ("1000 KRW 2009 rev").
+const unitWords = (code, e) => [...unitNoun(e), code.toLowerCase()];
 
 // Does a category name denote exactly this currency's banknotes/coins?
 // "Banknotes of Brazilian real" yes; "First series Euro banknotes" no;
@@ -222,12 +225,66 @@ const unitWords = (code, e) => unitNoun(e);
 function namesCurrency(name, e) {
   const tokens = labelTokens(e);
   const words = name.toLowerCase().replace(/[()]/g, ' ').split(/[\s\-]+/).filter(Boolean);
+  const shape = /^(banknotes?|coins?|paper money|billetes?|monedas?|notes?) (of|de|del) /i.test(name) || /^.+ (banknotes?|coins?|billetes?|monedas?)$/i.test(name);
   const rest = words.filter((w) => !STOP.has(w) && !KIND_WORDS.test(w));
-  return rest.length > 0 && rest.every((w) => tokens.has(w) || tokens.has(`${w}s`) || tokens.has(w.replace(/s$/, '')));
+  return shape && rest.length > 0 && rest.every((w) => tokens.has(w) || tokens.has(`${w}s`) || tokens.has(w.replace(/s$/, '')));
 }
 function leftover(name, e) {
   const tokens = labelTokens(e);
   return name.toLowerCase().replace(/[()]/g, ' ').split(/[\s\-]+/).filter((w) => w && !STOP.has(w) && !KIND_WORDS.test(w) && !tokens.has(w)).length;
+}
+
+// The country a code belongs to: the one whose ISO2 opens the code (MXN ->
+// MX, GBP -> GB), else the most populous country that uses it.
+const population = new Map(facts.countries.map((c) => [c.iso2, c.population || 0]));
+function primaryCountry(code) {
+  const users = codes.get(code) || [];
+  if (users.includes(code.slice(0, 2))) return code.slice(0, 2);
+  return users.slice().sort((a, b) => population.get(b) - population.get(a))[0] || null;
+}
+
+// Denomination subcategories ("1000 won banknotes", "Euro coins (1 euro)",
+// "20 United States dollar banknotes"), directly under a root or under its
+// "by denomination" / "by face value" child. Ranked by size; the biggest
+// are the ones people photograph, which are the ones in circulation.
+function parseDenomCat(name, nouns) {
+  if (!/(banknotes?|notes?|bills?|coins?|billetes?|monedas?|cédulas?|paper money|dimes?|quarters?|nickels?|pennies|cents?)\b/i.test(name)) return null;
+  const own = (w) => matchesUnit(w, nouns);
+  // "Dimes of the United States", "Quarters (United States coin)"
+  const named = Object.keys(COIN_NAMES).find((w) => new RegExp(`^${w}s?\\b`, 'i').test(name));
+  if (named && !/\d/.test(name)) return { n: COIN_NAMES[named][0], sub: COIN_NAMES[named][1], foreign: false };
+  for (const m of name.matchAll(/(?:^|[\s(])(\d+(?:[.,]\d+)?)\s*-?\s*((?:[a-záéíóúüñç円]+\s*){1,3})/gi)) {
+    // the unit may sit after a qualifier: "20 United States dollar banknotes"
+    const w = m[2].toLowerCase().split(/\s+/).filter(Boolean).find((x) => UNIT_SET.has(x) || own(x));
+    if (!w) continue;
+    const n = Number(m[1].replace(',', '.'));
+    if (!nice(n)) continue;
+    const sub = SUBUNIT.test(w);
+    return { n, sub, foreign: nouns.length > 0 && !own(w) && !sub };
+  }
+  return null;
+}
+async function denominationCats(roots, e, kind) {
+  const nouns = unitNoun(e);
+  const other = kind === 'banknotes' ? KIND.coins.cat : KIND.banknotes.cat;
+  const found = new Map();
+  for (const r of roots) {
+    let subs = await members(r, 'subcat');
+    for (const sub of subs.filter((x) => /by (denomination|face value|name)$/i.test(x))) subs = subs.concat(await members(sub, 'subcat'));
+    for (const sub of subs) {
+      if (BAD_CAT.test(sub) && !/by (denomination|face value|name)$/i.test(sub)) continue;
+      if (other.test(sub) && !KIND[kind].cat.test(sub)) continue;
+      const d = parseDenomCat(sub, nouns);
+      if (d && !d.foreign && !found.has(sub)) found.set(sub, d);
+    }
+  }
+  if (!found.size) return [];
+  const info = await existing([...found.keys()]);
+  return [...found.entries()]
+    .map(([name, d]) => ({ name, ...d, size: (info.get(name)?.files || 0) + (info.get(name)?.subcats || 0) * 5 }))
+    .filter((d) => d.size > 0)
+    .sort((a, b) => b.size - a.size)
+    .slice(0, KIND[kind].max);
 }
 
 // Find the root categories for a currency: { banknotes: [names], coins: [names] }.
@@ -273,14 +330,20 @@ async function findRoots(code, e) {
     roots[kind] = [...new Set([...narrowed, ...roots[kind]])];
   }
 
-  // Guesses when Wikidata gave no usable category.
-  if (!roots.banknotes.length || !roots.coins.length) {
+  // Guessed names, always (one batched call): "Renminbi banknotes" or
+  // "Egyptian pound banknotes" beats "Banknotes of China" when it exists.
+  {
     const guesses = [];
     const en = e?.name?.en;
-    for (const iso of codes.get(code) || []) {
-      const n = countryName.get(iso)?.en;
-      if (!n) continue;
-      guesses.push(`Banknotes of ${n}`, `Banknotes of the ${n}`, `Coins of ${n}`, `Coins of the ${n}`, `Money of ${n}`, `Money of the ${n}`);
+    const primary = primaryCountry(code);
+    const n = countryName.get(primary)?.en;
+    // The official name too: "Banknotes of the People's Republic of China"
+    // holds the renminbi, "Banknotes of China" holds every dynasty.
+    const official = facts.countries.find((c) => c.iso2 === primary)?.official?.en;
+    // Commons spells "People's" with a straight apostrophe; facts.json may not.
+    const variants = [n, official].filter(Boolean).flatMap((x) => [...new Set([x, x.replace(/[’‘]/g, "'"), x.replace(/'/g, '’')])]);
+    for (const name of variants) {
+      guesses.push(`Banknotes of ${name}`, `Banknotes of the ${name}`, `Coins of ${name}`, `Coins of the ${name}`, `Money of ${name}`, `Money of the ${name}`);
     }
     if (en) {
       const cap = en[0].toUpperCase() + en.slice(1);
@@ -295,11 +358,28 @@ async function findRoots(code, e) {
     }
   }
   // Keep at most 2 roots per kind: ones that name exactly this currency
-  // first, then ones that mention its unit, then the fewest stray words.
-  const rank = (n) => (namesCurrency(n, e) ? 0 : hasUnit(n) ? 1 : 2) * 100 + leftover(n, e) * 10 + Math.min(9, Math.floor(n.length / 20));
+  // first, then "Kind of <country>", then ones that mention the unit, then
+  // the fewest stray words. A denomination category ("One dollar coins of
+  // Canada", "1 Yen banknotes of Japan") is never a root.
+  const primary = primaryCountry(code);
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const country = countryName.get(primary)?.en;
+  const official = facts.countries.find((c) => c.iso2 === primary)?.official?.en;
+  const ofName = (n, name) => !!name && new RegExp(`^(banknotes|coins|paper money) of (the )?${esc(name).replace(/[’']/g, "[’']")}$`, 'i').test(n);
+  const isDenom = (n) => /^(one|two|three|five|ten|twenty|fifty|hundred|\d)/i.test(n) || !!parseDenomCat(n, unitNoun(e));
+  // 0 names the currency; 1 names the state officially; 2 names the country; 3 mentions the unit; 4 anything else.
+  const tier = (n) => (namesCurrency(n, e) ? 0 : official && official !== country && ofName(n, official) ? 1 : ofName(n, country) ? 2 : hasUnit(n) ? 3 : 4);
+  const rank = (n) => tier(n) * 100 + Math.min(9, leftover(n, e)) * 10 + Math.min(9, Math.floor(n.length / 20));
   for (const kind of Object.keys(KIND)) {
     const other = kind === 'banknotes' ? KIND.coins.cat : KIND.banknotes.cat;
-    roots[kind] = roots[kind].filter((n) => !other.test(n) || namesCurrency(n, e)).sort((a, b) => rank(a) - rank(b)).slice(0, 2);
+    roots[kind] = roots[kind].filter((n) => !isDenom(n) && (!other.test(n) || namesCurrency(n, e))).sort((a, b) => rank(a) - rank(b)).slice(0, 2);
+    // A root that names the currency or the state officially, and is not
+    // tiny, stands alone: "Banknotes of the People's Republic of China" must
+    // not be mixed with every dynasty under "Banknotes of China".
+    if (roots[kind].length === 2 && tier(roots[kind][0]) <= 1) {
+      const info = (await existing([roots[kind][0]])).get(roots[kind][0]);
+      if (info && info.files + info.subcats * 10 >= 30) roots[kind] = roots[kind].slice(0, 1);
+    }
   }
   return roots;
 }
@@ -315,33 +395,51 @@ async function searchPage(srsearch, sort, offset) {
   return { hits: (data?.query?.search || []).map((h) => h.title.replace(/^File:/, '')), total: data?.query?.searchinfo?.totalhits || 0 };
 }
 
-async function candidates(code, e, kind, roots) {
-  const titles = new Set();
+async function candidates(code, e, kind, roots, denomCats) {
+  const titles = new Map();
+  const add = (t, from) => { if (!titles.has(t)) titles.set(t, from || null); };
   const nouns = unitNoun(e);
-  const nounClause = nouns.length ? ` (${[...new Set(nouns.flatMap((n) => [n, `${n}s`, `${n}es`]))].join(' OR ')})` : '';
-  const neg = ' -specimen -counterfeit -fantasy -imitation -falschgeld';
+  // Big trees are narrowed to files that name the unit; common subunit words
+  // keep the quarters and the centavos in.
+  const subunits = kind === 'coins' ? ['cent', 'cents', 'centavo', 'centavos', 'centime', 'centimes', 'pence', 'penny', 'quarter', 'dime', 'nickel'] : [];
+  const nounClause = nouns.length ? ` (${[...new Set([...nouns.flatMap((n) => [n, `${n}s`, `${n}es`]), ...subunits])].join(' OR ')})` : '';
+  // No negated words here: "-specimen" makes CirrusSearch drop most
+  // deepcategory hits (132 -> 7 for the won). Specimens are scored down.
+  const neg = '';
+  const obv = ' (obverse OR anverso OR front OR avers OR vorderseite OR recto)';
+  // Denomination categories first: precise, and the file inherits the
+  // denomination when its title does not state one.
+  for (const d of denomCats) {
+    const q = `deepcategory:"${d.name}"${neg}`;
+    const first = await searchPage(q, 'create_timestamp_desc', 0);
+    for (const t of first.hits) add(t, d);
+    if (first.hits.length === 50) for (const t of (await searchPage(`${q}${obv}`, null, 0)).hits) add(t, d);
+  }
   for (const r of roots) {
     const plain = `deepcategory:"${r}"${neg}`;
     // Newest uploads first (favors the current series), then relevance.
     // Big trees (hundreds of files) are narrowed to titles/descriptions
-    // that name the unit, otherwise the two pages are mostly noise.
+    // that name the unit, otherwise the pages are mostly noise.
     const first = await searchPage(plain, 'create_timestamp_desc', 0);
-    const q = first.total > 200 && nounClause ? `deepcategory:"${r}"${nounClause}${neg}` : plain;
-    const pages = [first];
-    if (q !== plain) pages.push(await searchPage(q, 'create_timestamp_desc', 0));
-    if (pages[pages.length - 1].hits.length === 50) pages.push(await searchPage(q, 'create_timestamp_desc', 50));
-    pages.push(await searchPage(q, null, 0));
-    if (q !== plain) pages.push(await searchPage(`${q} (obverse OR anverso OR front OR avers OR vorderseite OR recto)`, null, 0));
-    for (const p of pages) for (const t of p.hits) titles.add(t);
+    for (const t of first.hits) add(t);
+    const big = first.total > 200;
+    const q = big && nounClause ? `deepcategory:"${r}"${nounClause}${neg}` : plain;
+    if (big) {
+      if (q !== plain) for (const t of (await searchPage(q, 'create_timestamp_desc', 0)).hits) add(t);
+      for (const t of (await searchPage(`${q}${obv}`, null, 0)).hits) add(t);
+    } else if (first.hits.length === 50) {
+      for (const t of (await searchPage(plain, 'create_timestamp_desc', 50)).hits) add(t);
+    }
+    for (const t of (await searchPage(q, null, 0)).hits) add(t);
   }
-  if (!roots.length) {
+  if (!roots.length && !denomCats.length) {
     const en = e?.name?.en;
     const es = e?.name?.es;
     const [wEn, wEs] = KIND[kind].search;
-    if (en) for (const t of (await searchPage(`"${wEn}" "${en}"${neg}`, null, 0)).hits) titles.add(t);
-    if (es && es !== en) for (const t of (await searchPage(`"${wEs}" "${es}"${neg}`, null, 0)).hits) titles.add(t);
+    if (en) for (const t of (await searchPage(`"${wEn}" "${en}"${neg}`, null, 0)).hits) add(t);
+    if (es && es !== en) for (const t of (await searchPage(`"${wEs}" "${es}"${neg}`, null, 0)).hits) add(t);
   }
-  return [...titles];
+  return titles;
 }
 
 // ---------------------------------------------------------------------------
@@ -349,31 +447,69 @@ async function candidates(code, e, kind, roots) {
 
 const OBVERSE = /\bobverse\b|\banverso\b|\bfront\b|\bavers\b|vorderseite|\brecto\b|\bobv\b|\bav\b|\bface\b|表|\bfrente\b/i;
 const REVERSE = /\breverse\b|\breverso\b|\bback\b|\brevers\b|rückseite|\bverso\b|\brev\b|\brv\b|裏|\bdorso\b/i;
-const JUNK = /specimen|counterfeit|\bfake|falschgeld|\bfalso|fantasy|imitation|replica|play money|\btoy\b|proposal|mock|unissued|essay|cheque|check\b|\bbond\b|\bstamp|postcard|token|medal|coupon|voucher|\bvale\b|certificate|military payment|notgeld|coloni|confederate|overstamp|revolution|provisional|estado de|state of|constitucionalista|comisión|henequén|tesorería|imperial|\bempire\b|\bkingdom\b|\bduchy\b|\bréis\b|\bcruzeiro|cruzado|\bsen\b|\brin\b|\bmon\b|\bbu\b|\bshu\b|cash coin|lincoln|lindbergh|dpla|lccn|urn-3|baker\.ac|collection|museu|museum|exhibit|sammlung|hbs\.|blanket|cake|cookie|costume|dress|pillow|towel|reales\b|treasure|\bcob\b|century|siglo|siècle|jahrhundert|pirate|galleon|shipwreck|ingot|medallion|jeton|gaming|casino|chip|bitcoin|crypto/i;
-const SCENE = /wallet|\bhand\b|\bhands\b|\bpile|stack|\bcash\b|shred|bundle|straps?\b|machine|\batm\b|\bsign\b|chart|\bmap\b|cartera|billetera|mano\b|montón|fajo|bolsa|empilhad|neon|street|shop|market|tienda|price|precio|donante|campaign|campaña|wikiconvention|dsc[_ ]?\d|img[_ ]?\d|p0\d{5}|\(\d{7,}\)|^\d{6,}|^dsc|^img|^p\d{7}|screenshot|detail|detalle|closeup|close-up|macro|uv\b|ultraviolet|watermark|透かし|security|seguridad|hilo|firma|signature|serial|微|locker|vending|parking|laundry|arcade|pachinko|station|circulation|millions|graph|statistic|estadística|\bgdp\b|inflation|exchange rate|tipo de cambio|rates?\b|table\b|tabla|modelo|model\b|boceto|sketch|drawing|escudo nacional|coat of arms|press|conference|meeting|minister|president|governor|speech/i;
+const JUNK = /specimen|counterfeit|\bfake|falschgeld|\bfalso|fantasy|imitation|replica|play money|\btoy\b|proposal|mock|unissued|essay|cheque|check\b|\bbond\b|\bstamp|postcard|token|medal|coupon|voucher|\bvale\b|certificate|military payment|notgeld|coloni|confederate|overstamp|revolution|provisional|estado de|state of|constitucionalista|comisión|henequén|tesorería|imperial|\bempire\b|\bkingdom\b|\bduchy\b|\bréis\b|\bcruzeiro|cruzado|\bsen\b|\brin\b|\bmon\b|\bbu\b|\bshu\b|cash coin|lincoln|lindbergh|dpla|lccn|urn-3|baker\.ac|collection|museu|museum|exhibit|sammlung|hbs\.|demand note|treasury note|interest bearing|free banking|national bank|gold certificate|silver certificate|coin note|continental|philippine|republic of texas|american period|fractional|george v\b|george vi\b|british india|king george|queen victoria|edward vii|\braj\b|hwan\b|blanket|cake|cookie|costume|dress|pillow|towel|reales\b|treasure|\bcob\b|century|siglo|siècle|jahrhundert|pirate|galleon|shipwreck|ingot|medallion|jeton|gaming|casino|chip|bitcoin|crypto|historic|histórico|histórica|quarter eagle|half eagle|double eagle|sovereign|krugerrand|challenge coin|\d+sen\b|czek|chèque|scheck|traveller|travelers?\b|state bank|\b1[6-9]xx\b|bon towarowy|circulation|circulación|millions|statistic|estadística|\bgraph|\bchart|\bscrip\b|accession|\bh\. \d{4}\.\d|\bold\b|antiguo|antigua|\balte[rn]?\b|ancien|dynasty|dinastía|\bwén\b|amulet|tong bao|bao chao|former currency|printing|block|plate|\bdie\b|mould|mold|hutt river|province|micronation|fraud|falsificad|world youth day|ptolem|roman coin|greek coin|byzantine|ottoman|ancient|antique|\bbce?\b|\bb\.c\.|mithradates|abbasid|umayyad|mughal|seleucid|achaemenid|sasanian|parthian|hellenistic|denarius|sestertius|drachm|stater|solidus|follis|\bobol/i;
+const SCENE = /wallet|\bhand\b|\bhands\b|\bpile|stack|\bcash\b|shred|bundle|straps?\b|machine|\batm\b|\bsign\b|chart|\bmap\b|cartera|billetera|mano\b|montón|fajo|bolsa|empilhad|neon|street|shop|market|tienda|price|precio|donante|campaign|campaña|wikiconvention|dsc[_ ]?\d|img[_ ]?\d|p0\d{5}|\(\d{7,}\)|^\d{6,}|^dsc|^img|^p\d{7}|screenshot|detail|detalle|closeup|close-up|macro|uv\b|ultraviolet|watermark|透かし|security|seguridad|hilo|firma|signature|serial|微|locker|vending|parking|laundry|arcade|pachinko|station|circulation|millions|graph|statistic|estadística|\bgdp\b|inflation|exchange rate|tipo de cambio|rates?\b|table\b|tabla|modelo|model\b|boceto|sketch|drawing|escudo nacional|coat of arms|press|conference|meeting|minister|president|governor|speech|\bwith\b|\bscale\b|comparison|vergleich|hologram|holograma|raised print|draghi|lagarde|duisenberg|trichet|signatur|microprint|emerald|window|ventana|finestra|\bbill\.jpg$|disordered|pay the/i;
 
 const COMMEM = /commemorative|conmemorativ|comemorativ|gedenkmünze|collector|colección|coleção|\bproof\b|bullion|olympic|olímpic|expo\s?\d{4}|anniversary|aniversario|aniversário|jahre\b|años\b|anos\b|libertad\b.*\bonza|onza|ounce|\boz\b|silver\b|\bgold\b|\bplata\b|\boro\b|\bouro\b|\bprata\b|pattern|essai|trial|medal/i;
-const WORDS = { one: 1, un: 1, uno: 1, um: 1, two: 2, dos: 2, dois: 2, five: 5, cinco: 5, ten: 10, diez: 10, dez: 10, twenty: 20, veinte: 20, vinte: 20, fifty: 50, cincuenta: 50, cinquenta: 50, hundred: 100, cien: 100, cem: 100, thousand: 1000, mil: 1000, 'two hundred': 200, doscientos: 200, duzentos: 200, 'five hundred': 500, quinientos: 500, quinhentos: 500, 'ten thousand': 10000, 'one thousand': 1000, 'five thousand': 5000, 'veinticinco': 25, 'twenty-five': 25, 'twenty five': 25 };
+// Words that mark the series in circulation.
+const CURRENT = /\bcurrent\b|\bactual\b|polymer|polímero|polímer|europa series|serie europa|new series|nueva familia|nuevo billete|nueva serie|nova família|nova série|new design|redesign|\bnew\b|\bnuev[oa]\b|\bnov[oa]\b|9th series|neunte serie/i;
+const WORDS = { one: 1, un: 1, uno: 1, um: 1, two: 2, dos: 2, dois: 2, five: 5, cinco: 5, ten: 10, diez: 10, dez: 10, twenty: 20, veinte: 20, vinte: 20, fifty: 50, cincuenta: 50, cinquenta: 50, hundred: 100, cien: 100, cem: 100, thousand: 1000, mil: 1000, 'two hundred': 200, doscientos: 200, duzentos: 200, 'five hundred': 500, quinientos: 500, quinhentos: 500, 'ten thousand': 10000, 'one thousand': 1000, 'five thousand': 5000, 'veinticinco': 25, 'twenty-five': 25, 'twenty five': 25, twee: 2, vijf: 5, tien: 10, twintig: 20, vijftig: 50, honderd: 100, zwei: 2, fünf: 5, zehn: 10, zwanzig: 20, fünfzig: 50, hundert: 100, deux: 2, dix: 10, vingt: 20, cinquante: 50, mille: 1000 };
 const SUBUNIT = /\b(cents?|centavos?|centimes?|céntimos?|cêntimos?|pence|penny|sen|kopek|kopeck|paise|paisa|fils|halala|piastres?|agorot|lipa|stotinki|öre|ore|øre|groszy|grosz|fen|jiao|chon|jeon|satang|pul|tetri|tyiyn|dirams?|qapik|luma|avos|centimos?|rappen|cent)\b/i;
 const ORD = { first: 1, primera: 1, primeira: 1, second: 2, segunda: 2, third: 3, tercera: 3, terceira: 3, fourth: 4, cuarta: 4, fifth: 5, quinta: 5, sixth: 6 };
 
-function parseTitle(title, ctxUnits = []) {
+const COUNTRY_RE = new RegExp(`\\b(${facts.countries.map((c) => c.name.en).sort((a, b) => b.length - a.length).filter((n) => n.length > 4 && !/^(United|Saint|South|North|Central|Western|Eastern|Northern|Southern)$/.test(n)).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'i');
+const countryByName = new Map(facts.countries.map((c) => [c.name.en.toLowerCase(), c.iso2]));
+
+// "Zlotych" is zloty, "krónur" is króna, "lirası" is lira: a word names a
+// unit when, accents stripped, it starts with the unit's stem (the noun less
+// its last letter when it has five or more). Short nouns need an exact or
+// plural match ("yen", "yens", "won").
+const fold = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/ł/g, 'l').replace(/ø/g, 'o').replace(/đ/g, 'd').replace(/æ/g, 'ae').replace(/ß/g, 'ss').replace(/ı/g, 'i');
+function matchesUnit(word, nouns) {
+  const w = fold(word);
+  return nouns.some((u) => {
+    const n = fold(u);
+    if (w === n || w === `${n}s` || w === `${n}es`) return true;
+    return n.length >= 5 && w.startsWith(n.slice(0, n.length - 1));
+  });
+}
+// Coins named rather than numbered (English-speaking countries).
+const COIN_NAMES = { penny: [1, true], pennies: [1, true], nickel: [5, true], dime: [10, true], quarter: [25, true], 'half dollar': [50, true] };
+
+// Face values are round: 1, 2, 2.5, 5, 20, 25, 500, 100000, 0.05. A number
+// whose leading digits are not n.5-ish (1967, 17, 271, 1098) is a year or a
+// catalog number.
+function nice(n) {
+  if (!(n > 0)) return false;
+  const m = n / 10 ** Math.floor(Math.log10(n));
+  return Math.abs(m * 2 - Math.round(m * 2)) < 1e-9;
+}
+function parseTitle(title, ctxUnits = [], users = null) {
   const t = title.replace(/\.[a-z0-9]+$/i, '');
   const lower = t.toLowerCase();
+  const isUnit = (w) => UNIT_SET.has(w) || matchesUnit(w, ctxUnits);
   let year = null;
   for (const m of t.matchAll(/(?<!\d)(1[6-9]\d\d|20[0-3]\d)(?!\d)/g)) {
     const y = Number(m[1]);
+    // "2000 Zlotych", "1000 yen": a face value, not a year
+    const next = /^\s*[-–]?\s*([a-záéíóúüñçãõâêôıöşğłżśćń円]+)/i.exec(t.slice(m.index + m[0].length));
+    if (next && isUnit(next[1].toLowerCase())) continue;
     if (!year || y > year) year = y;
   }
+  // Series: a letter ("Series F", "Familia G"), an ordinal ("Second series",
+  // "1 Brazil real Second Obverse", "segunda serie"), a Roman or Arabic
+  // numeral ("serieVI", "Serie 2"). Letters and numbers are compared apart.
   let series = null;
-  const sl = /\bserie[s]?\s*([A-H])\b/i.exec(t);
+  const sl = /\b(?:serie|series|familia|família|family|type|tipo)\s*([A-H])\b/i.exec(t);
   if (sl) series = sl[1].toUpperCase();
   else {
-    const so = /\b(first|second|third|fourth|fifth|sixth|primera|segunda|tercera|cuarta|quinta|primeira|segunda|terceira)\s+(serie|series|família|familia|family)/i.exec(t);
+    const so = /\b(first|second|third|fourth|fifth|sixth|primera|segunda|tercera|cuarta|quinta|sexta|primeira|terceira)\b(?=.*\b(serie|series|família|familia|family|obverse|reverse|issue|edition|anverso|reverso|front|back)\b)/i.exec(t);
     if (so) series = String(ORD[so[1].toLowerCase()]);
     else {
-      const sn = /\b(serie|series|família|familia)\s+(\d)\b/i.exec(t);
-      if (sn) series = sn[2];
+      const sn = /\b(?:serie|series|família|familia)\s*(\d|[IVX]{1,4})\b/i.exec(t);
+      if (sn) series = /^\d$/.test(sn[1]) ? sn[1] : String({ I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 }[sn[1].toUpperCase()] || '');
+      if (series === '') series = null;
     }
   }
   // Denomination: a number followed (within three words) by a unit noun or a
@@ -383,20 +519,22 @@ function parseTitle(title, ctxUnits = []) {
   let subunit = null;
   let foreign = false;
   const nums = [];
-  const isUnit = (w) => UNIT_SET.has(w) || ctxUnits.some((u) => u === w || `${u}s` === w || `${u}es` === w);
-  for (const m of t.matchAll(/(?<![\w.,€$£¥])(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s?(k(?![\w]))?/gi)) {
+  const ownUnit = (w) => matchesUnit(w, ctxUnits);
+  for (const m of t.matchAll(/(?<![\w.,])(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)\s?(k(?![\w]))?/gi)) {
     let n = Number(m[1].replace(/,(?=\d{3}\b)/g, '').replace(/\.(?=\d{3}\b)/g, '').replace(',', '.'));
     if (m[2]) n *= 1000;
     const after = t.slice(m.index + m[0].length);
     const before = t.slice(0, m.index);
-    const toks = after.toLowerCase().match(/[a-záéíóúüñçãõâêôıöşğ円]+|\d+/g) || [];
+    if (/^(st|nd|rd|th|º|ª|er|e)\b/i.test(after)) continue; // "9th series"
+    if (!nice(n)) continue; // 1967, 17, 271 are catalog numbers or years, not face values
+    const toks = after.toLowerCase().match(/[a-záéíóúüñçãõâêôıöşğłżśćń円]+|\d+/g) || [];
     const nextWords = [];
     for (const tok of toks) { if (/^\d/.test(tok)) break; nextWords.push(tok); if (nextWords.length === 3) break; }
     const symbolAfter = /^\s?[€$£¥円]/.test(after) || /[€$£¥]\s?$/.test(before);
     const unitNear = nextWords.some(isUnit) || symbolAfter;
     const unitWord = nextWords.find(isUnit);
-    if (unitWord && ctxUnits.length && !ctxUnits.some((u) => u === unitWord || `${u}s` === unitWord || `${u}es` === unitWord) && !SUBUNIT.test(unitWord)) foreign = true;
-    const kindBefore = /(billete|banknote|note|bill|cédula|cedula|moneda|moeda|coin|münze|pièce|piece)s?\s+(de|of|von|da)?\s*$/i.test(before);
+    if (unitWord && ctxUnits.length && !ownUnit(unitWord) && !SUBUNIT.test(unitWord)) foreign = true;
+    const kindBefore = /(billete|banknote|note|bill|cédula|cedula|moneda|moeda|coin|münze|pièce|piece)s?\s+(de|of|von|da)\s+$/i.test(before);
     const isYear = /^(1[6-9]\d\d|20[0-3]\d)$/.test(m[1]) && !nextWords.slice(0, 1).some(isUnit);
     if (isYear || n > 1000000 || n === 0) continue;
     if (!unitNear && !kindBefore) continue;
@@ -404,9 +542,20 @@ function parseTitle(title, ctxUnits = []) {
   }
   if (!nums.length) {
     for (const [w, n] of Object.entries(WORDS).sort((a, b) => b[0].length - a[0].length)) {
-      const m = new RegExp(`(^|[\\s(])${w}[\\s)\\-]+([a-záéíóúüñç]+)`, 'i').exec(lower);
-      if (m && isUnit(m[2])) { nums.push({ n, nearUnit: true, sub: SUBUNIT.test(m[2]) }); break; }
+      // the unit may follow an adjective: "twee Zuid-Afrikaanse rand", "cinco pesos oro"
+      const m = new RegExp(`(^|[\\s(])${w}[\\s)\\-]+((?:[a-záéíóúüñçãõâêôıöşğłżśćń]+[\\s\\-]*){1,3})`, 'i').exec(lower);
+      const unitWord = m && m[2].split(/[\s\-]+/).filter(Boolean).find(isUnit);
+      if (unitWord) {
+        nums.push({ n, nearUnit: true, sub: SUBUNIT.test(unitWord) });
+        if (ctxUnits.length && !ownUnit(unitWord) && !SUBUNIT.test(unitWord)) foreign = true;
+        break;
+      }
     }
+  }
+  if (!nums.length) {
+    // "Washington quarter", "Jefferson nickel": named coins
+    const cn = Object.keys(COIN_NAMES).sort((a, b) => b.length - a.length).find((w) => new RegExp(`\\b${w}\\b`, 'i').test(lower));
+    if (cn) nums.push({ n: COIN_NAMES[cn][0], nearUnit: true, sub: COIN_NAMES[cn][1] });
   }
   if (nums.length) {
     const pick = nums.find((x) => x.nearUnit) || nums[0];
@@ -414,33 +563,47 @@ function parseTitle(title, ctxUnits = []) {
     if (pick.sub) subunit = true;
   }
   const side = OBVERSE.test(t) && !REVERSE.test(t) ? 'obverse' : REVERSE.test(t) && !OBVERSE.test(t) ? 'reverse' : null;
-  return { year, series, denomination, subunit, side, foreign };
+  const cm = COUNTRY_RE.exec(t);
+  const foreignCountry = !!(cm && users && !users.has(countryByName.get(cm[1].toLowerCase())));
+  return { year, series, denomination, subunit, side, foreign, foreignCountry };
 }
 
-function scoreTitle(title, kind, unit, ctx) {
-  const p = parseTitle(title, unit);
+function scoreTitle(title, kind, unit, ctx, fromCat) {
+  const p = parseTitle(title, unit, ctx.users);
   let s = 0;
+  const ownDenomination = p.denomination;
+  if (fromCat) {
+    s += 2;
+    if (!p.denomination) { p.denomination = String(fromCat.n); p.subunit = fromCat.sub || null; }
+  }
   if (p.side === 'obverse') s += 6;
   if (p.side === 'reverse') s -= 4;
   if (p.denomination) s += 3;
+  if (p.foreignCountry) s -= 6;
+  // The money people carry today ranks first: recent years and the newest
+  // series up, anything before 1990 well down.
   if (p.year) {
-    if (p.year >= 2000) s += 3 + (p.year - 2000) / 10;
+    if (p.year >= 2010) s += 4 + (p.year - 2010) / 5;
+    else if (p.year >= 2000) s += 3;
     else if (p.year >= 1990) s += 0;
-    else if (p.year >= 1950) s -= 4;
-    else s -= 9;
+    else if (p.year >= 1950) s -= 6;
+    else s -= 12;
   }
-  if (p.series && ctx.maxSeries) {
-    s += p.series === ctx.maxSeries ? 3 : -2;
+  if (p.series) {
+    const max = /^[A-H]$/.test(p.series) ? ctx.maxLetter : ctx.maxOrdinal;
+    if (max) s += p.series === max ? 4 : -3;
   }
-  if (JUNK.test(title)) s -= 7;
-  if (p.foreign) s -= 4;
-  if (COMMEM.test(title)) s -= 5;
+  if (CURRENT.test(title)) s += 4;
+  if (JUNK.test(title)) s -= 9;
+  if (p.foreign) s -= 6;
+  if (COMMEM.test(title)) s -= 6;
   if (SCENE.test(title)) s -= 4;
   if (KIND[kind].word.test(title)) s += 1;
   if (unit.some((w) => title.toLowerCase().includes(w))) s += 1;
-  if (!p.denomination && !KIND[kind].word.test(title)) s -= 2;
-  if (kind === 'banknotes' && KIND.coins.word.test(title) && !KIND.banknotes.word.test(title)) s -= 5;
-  if (kind === 'coins' && KIND.banknotes.word.test(title) && !KIND.coins.word.test(title)) s -= 5;
+  if (!ownDenomination && !KIND[kind].word.test(title)) s -= 2;
+  // A title that names only the other kind is the other kind, whatever the tree says.
+  if (kind === 'banknotes' && KIND.coins.word.test(title) && !KIND.banknotes.word.test(title)) s -= 20;
+  if (kind === 'coins' && KIND.banknotes.word.test(title) && !KIND.coins.word.test(title)) s -= 20;
   return { score: s, ...p };
 }
 
@@ -484,7 +647,6 @@ async function imageinfo(titles) {
 // 6. Per currency.
 
 const result = {};
-const stats = { net: 0 };
 
 async function build(code) {
   const e = wd.get(code) || null;
@@ -503,20 +665,33 @@ async function build(code) {
   const roots = await findRoots(code, e);
   for (const kind of Object.keys(KIND)) {
     entry.categories[kind] = roots[kind][0] || null;
-    const titles = (await candidates(code, e, kind, roots[kind])).filter((t) => EXT_OK.test(t));
+    const denomCats = await denominationCats(roots[kind], e, kind);
+    const cands = await candidates(code, e, kind, roots[kind], denomCats);
+    const titles = [...cands.keys()].filter((t) => EXT_OK.test(t));
+    if (DEBUG) console.log(`${code} ${kind}: roots ${JSON.stringify(roots[kind])}; denomination cats ${JSON.stringify(denomCats.map((d) => d.name))}; ${titles.length} candidates`);
     if (!titles.length) continue;
     // Series context: the latest letter/ordinal seen across this currency's titles.
     const seriesSeen = titles.map((t) => parseTitle(t, unit).series).filter(Boolean);
-    const letters = seriesSeen.filter((x) => /^[A-H]$/.test(x)).sort();
-    const ordinals = seriesSeen.filter((x) => /^\d$/.test(x)).sort();
-    const ctx = { maxSeries: letters.length >= 2 ? letters[letters.length - 1] : ordinals.length >= 2 ? ordinals[ordinals.length - 1] : null };
-    const ranked = titles.map((t) => ({ title: t, ...scoreTitle(t, kind, unit, ctx) })).sort((a, b) => b.score - a.score);
-    const top = ranked.slice(0, kind === 'banknotes' ? 40 : 30).filter((r) => r.score >= -3);
+    const letters = [...new Set(seriesSeen.filter((x) => /^[A-H]$/.test(x)))].sort();
+    const ordinals = [...new Set(seriesSeen.filter((x) => /^\d+$/.test(x)))].sort((a, b) => Number(a) - Number(b));
+    const ctx = {
+      users: new Set(codes.get(code) || []),
+      maxLetter: letters.length >= 2 ? letters[letters.length - 1] : null,
+      maxOrdinal: ordinals.length >= 2 ? ordinals[ordinals.length - 1] : null,
+    };
+    const ranked = titles.map((t) => ({ title: t, ...scoreTitle(t, kind, unit, ctx, cands.get(t)) })).sort((a, b) => b.score - a.score);
+    if (DEBUG) for (const r of ranked.slice(0, 20)) console.log(`   ${r.score.toFixed(1).padStart(5)} ${r.denomination || '-'} ${r.title}`);
+    // Floor at 1: a file that earned one penalty (foreign unit, scene, junk
+    // word) is left out even when the currency is thin. Empty beats wrong.
+    const top = ranked.slice(0, kind === 'banknotes' ? 40 : 30).filter((r) => r.score >= 1);
     if (!top.length) continue;
     const info = await imageinfo(top.map((r) => r.title));
+    // Width floor: 600, or 560 for a file the title dates to 2010 or later or
+    // places in the newest series (the ECB's own Europa-series scans are 596).
+    const current = (r) => (r.year && r.year >= 2010) || (r.series && (r.series === ctx.maxLetter || r.series === ctx.maxOrdinal)) || CURRENT.test(r.title);
     const ok = top.filter((r) => {
       const i = info.get(r.title);
-      return i && i.w >= MIN_WIDTH && /^image\/(jpeg|png|tiff|webp)$/.test(i.mime || '');
+      return i && i.w >= (current(r) ? MIN_WIDTH_CURRENT : MIN_WIDTH) && /^image\/(jpeg|png|tiff|webp)$/.test(i.mime || '');
     });
     // One per denomination; files without a detected denomination are their own group (at most 2 kept).
     const groups = new Map();
@@ -532,8 +707,11 @@ async function build(code) {
       picked.push(r);
       if (picked.length >= KIND[kind].max) break;
     }
+    // Today's money first (dated 2000 or later, newest series, or marked
+    // current), each block in face-value order; undated or older issues after.
     const num = (r) => (r.denomination ? Number(r.denomination) * (r.subunit ? 0.01 : 1) : Infinity);
-    picked.sort((a, b) => num(a) - num(b));
+    const recent = (r) => ((r.year && r.year >= 2000) || current(r) ? 0 : 1);
+    picked.sort((a, b) => recent(a) - recent(b) || num(a) - num(b));
     entry[kind] = picked.map((r) => {
       const i = info.get(r.title);
       const o = { file: r.title, denomination: r.denomination ? (r.subunit ? `${r.denomination} (subunit)` : r.denomination) : null, w: i.w, h: i.h, license: i.license, artist: i.artist, credit: i.credit, attributionRequired: i.attributionRequired };

@@ -544,3 +544,87 @@ Both are equirectangular with longitude 0 at the center and north at the top: `x
 - `idmap.png`: `magFilter = minFilter = NearestFilter`, `generateMipmaps = false`, `anisotropy = 1`. Any filtering blends ids into a neighbor's.
 - `borders.png`: `LinearFilter` with mipmaps and anisotropy as before; the shader reads `.a`.
 - The ids only match while the app assigns them the same way (`feature(topo, topo.objects.countries).features[i].properties.id = i + 1`). Rebuild the PNGs with the map.
+
+## Money
+
+### What runs
+
+`npm run money` → `node tools/build-money.mjs`. For every currency code in `public/data/facts.json` (162 codes on 2026-10-20) it collects photographs or scans of the banknotes (first) and coins from Wikimedia Commons, with the license and author of each file, plus the currency's name and issuer from Wikidata. Nothing is drawn or invented: a currency whose notes are not on Commons gets an empty list, and the card must say so.
+
+Two sources, both through `tools/net.mjs`:
+
+- **Wikidata** (one SPARQL query, cached in `data/cache/wikidata/`): the item whose ISO 4217 code (P498) is the code, its label es/en (with the `mul` fallback: "euro"), its Commons category (P373), its main image (P18) and its issuer (P562, "central bank/issuer", skipping ended and deprecated statements). When two items share a code the one with more sitelinks wins. 153 codes match; the 9 that do not (AAD CKD FOK GGP IMP JEP KID TVD ZWB) are not ISO 4217 codes but the unofficial codes facts.json carries for Antarctica, the Cook Islands, the Faroes, Guernsey, the Isle of Man, Jersey, Kiribati, Tuvalu and Zimbabwe's bond notes; they get `name: null` and empty lists.
+- **Wikimedia Commons API** (`https://commons.wikimedia.org/w/api.php`, every response cached in `data/cache/commons/` keyed by URL). Pool of 2, request starts 400 ms apart, retries and the shared User-Agent from `fetchRetry`; cached answers skip the gate, so a re-run after a scoring change takes about 30 s. A full crawl from an empty cache was 1,861 requests in 16 minutes.
+
+### How files are found
+
+1. **Root categories.** The subcategories of the Wikidata category ("Money of Mexico", "Euro") that name banknotes or coins, plus guessed names checked in one batched `categoryinfo` call: "Banknotes of <country>", "Banknotes of the <official name>", "<Currency> banknotes", "Coins of …". Ranking: a category that names the currency itself ("Banknotes of Brazilian real", "Euro coins") beats one that names the state officially ("Banknotes of the People's Republic of China", which holds the renminbi while "Banknotes of China" holds every dynasty), which beats "Banknotes of <country>", which beats anything else. A denomination category ("1 Yen banknotes of Japan", "One dollar coins of Canada") is never a root. At most two roots per kind; when the first names the currency or the state and is not tiny, it stands alone. The primary country of a code is the one whose ISO2 opens it (MXN → MX, GBP → GB), else the most populous user, so GBP guesses "United Kingdom" and not "Jersey".
+2. **Denomination categories.** Subcategories such as "1000 won banknotes", "20 United States dollar banknotes", "Euro coins (10 cents)", "Dimes of the United States", directly under a root or under its "by denomination" / "by face value" / "by name" child, ranked by size and capped at 8 (notes) or 6 (coins). A file found through one inherits the denomination when its title does not state it.
+3. **Search.** CirrusSearch `deepcategory:"<category>"` flattens a whole tree in one request. Each denomination category and each root is searched sorted by `create_timestamp_desc` (newest uploads first, which favors the series in circulation) and by relevance; trees with more than 200 hits are narrowed to files that name the unit (`(yen OR yens)`, with `cent`, `quarter`, `dime`… for coins) and get one more page aimed at obverse scans. **Never put a negated word in a deepcategory query**: `-specimen` made the Korean tree drop from 132 hits to 7; specimens are scored down instead. A currency with no category at all falls back to plain search (`"banknote" "<label en>"`, `"billete" "<label es>"`).
+4. **Title scoring** in JS, no network: obverse words up (+6), reverse words down; a face value detected in the title (+3): a round number (1, 2, 2.5, 20, 500, 100000; 1967 and 17 are years and catalog numbers) followed within three words by a unit noun, a currency symbol, or preceded by "billete de" / "banknote of", with inflections matched by stem ("Zlotych" is złoty, "krónur" is króna) and number words in es/en/pt/nl/de/fr ("Dos pesos", "twee rand"); a year in the title: 2010+ strongly up, 2000s up, 1950–1989 down (−6), earlier −12; the newest series seen across the currency's titles (letter: "Series F", "Familia G"; ordinal: "Second series", "1 Brazil real Second Obverse"; Roman: "serieVI") +4, an older series −3; words marking the current issue ("polymer", "Europa series", "new", "9th series") +4; a foreign unit or another country's name in the title −6; commemorative, bullion and collector words −6; scene words (wallet, hand, pile, ATM, hologram, signature, chart) −4; dealer, museum, cheque, token, colonial, fantasy, "old"/"historic" and the like −9. A title that names only the other kind ("Moneda" under banknotes) is out (−20). Files scoring under 1 are dropped: a file that earned one penalty is left out even when the currency is thin, because an empty gallery beats a wrong one.
+5. **imageinfo** for the 40 best notes and 30 best coins (50 titles per call): width, height, MIME, `LicenseShortName`, `Artist`, `Credit`, `AttributionRequired`. SVG, GIF and PDF are skipped; width must be at least 600, or 560 for a file the title dates to 2010 or later or places in the newest series (the ECB's own Europa-series scans are 596 px wide, Brazil's second-family scans 573). One file per denomination, at most two files without a detected denomination (and only when the title names a banknote or coin), 8 notes and 6 coins per currency. Today's money comes first in the list (dated 2000 or later, newest series, or marked current), each block in face-value order, then undated or older issues.
+
+### Honesty
+
+Commons only has what people were allowed to upload. A central bank that keeps its copyright (Mexico, the United Kingdom, Canada, Australia, Poland, the Nordic countries, Vietnam and many more) has no current notes on Commons; the gallery is then older issues or empty. Mexico's "Familia G" (2018–) is not on Commons at all: the MXN list is 1910s revolution-era notes and a 1970 one-peso note, filed exactly as Commons files them. The card must therefore say "lo que Wikimedia Commons tiene archivado" / "as filed on Wikimedia Commons", show `year` and `series` when present, and never say "current" or "today's banknotes" by itself. The data that *is* current: USD (Federal Reserve notes, series 2013–2025), EUR (Europa series 10–200 €, 5 € 2013; the 500 € is the 2002 issue because no Europa 500 exists), JPY (the 2024 series 1,000/5,000/10,000 yen first), BRL (second family 1–200 reais), INR (Mahatma Gandhi New Series 2014–2018), EGP (2011–2022 incl. the 10-pound polymer), KRW (serie V/VI and the 2009 50,000 won).
+
+Licenses are whatever the file page says and are kept per file: public domain (338 files), CC BY-SA 4.0 (316), CC0 (101), CC BY-SA 3.0 (85), CC BY 4.0 (40), smaller CC variants, and issuer permissions that are **not** free licenses: "ECB decisions ECB/2003/4 and ECB/2003/5" (7 euro notes: reproduction allowed as long as it cannot be mistaken for a genuine note), "Use permitted by the BOI, Currency Department" (Israel), "South Korean currency", "GODL-India", "Copyrighted free use". The script filters nothing by license; the card shows `license` and `artist` from the file and links the file page, where the full terms are.
+
+### When
+
+On demand; the output is **committed** (`public/data/money.json`, about 250 KB, capped at 600 KB: the script drops `credit` first, then lowers the per-currency caps). Re-run a couple of times a year or when a new series is issued, with `rm -r data/cache/commons` first for fresh search results (the Wikidata cache can stay), and commit.
+
+### Output
+
+`public/data/money.json`:
+
+```json
+{
+  "built": "2026-10-20",
+  "source": "Wikidata (CC0), Wikimedia Commons (per-file licenses)",
+  "attribution": { "data": "…", "images": "…" },
+  "notes": "how the lists were built, one paragraph",
+  "currencies": {
+    "BRL": {
+      "name": { "es": "real brasileño", "en": "Brazilian real" },
+      "issuer": { "es": "Banco Central de Brasil", "en": "Central Bank of Brazil", "qid": "Q806186" },
+      "qid": "Q173117",
+      "image": "Novas cedulas real thumb11-450x309.jpg",
+      "categories": { "banknotes": "Banknotes of Brazilian real", "coins": "Coins of Brazilian real" },
+      "banknotes": [
+        { "file": "200 Brazil real Second Obverse.jpg", "denomination": "200", "w": 573, "h": 262,
+          "license": "Public domain", "artist": "Central Bank of Brazil", "credit": "\" Cédula de 200 Reais \", Central Bank of Brazil",
+          "attributionRequired": false, "series": "2", "side": "obverse" }
+      ],
+      "coins": [
+        { "file": "25 Centavos (2021) - Vorderseite.jpg", "denomination": "25 (subunit)", "w": 1857, "h": 1883,
+          "license": "Public domain", "artist": "…", "credit": "…", "attributionRequired": false, "year": 2021, "side": "obverse" }
+      ]
+    }
+  }
+}
+```
+
+- `name`, `issuer`, `qid`, `image` are from Wikidata and `null` when missing (`name` is Wikidata's label as it stands: Q4730 is labelled "peso", not "Mexican peso"; fix it at the source). `image` is the item's P18, a Commons file name, the card's fallback when the lists are empty (126 currencies have one). `note` appears only on the 9 codes without a Wikidata item.
+- `categories` names the Commons category each list was built from (`null` when none was found), so a wrong gallery can be traced.
+- Per file: `file` is the Commons **file name** (no `File:`), `denomination` the face value as a string (`"25 (subunit)"` for cents, centavos, piastres…; `null` when not detected), `w`/`h` the pixel size, `license` the file's short license name, `artist` and `credit` as plain text clipped to 60 characters (`null` when missing), `attributionRequired` a boolean or `null`; `year`, `series` and `side` (`"obverse"`/`"reverse"`) appear only when the title states them.
+- Thumbnail: `https://commons.wikimedia.org/wiki/Special:FilePath/<encodeURIComponent(file)>?width=800`; file page for the credit: `https://commons.wikimedia.org/wiki/File:<file>`.
+
+Counts on 2026-10-20: 162 codes; 112 currencies with at least one banknote, 69 with four or more, 35 with the full eight; 115 with at least one coin, 28 with six; 551 banknote files and 394 coin files, 473 of them obverse, 414 dated in the title and 316 of those 2000 or later. 22 codes have nothing: the 9 non-ISO codes, and AOA AWG BMD FKP GIP KYD LSL MZN PYG SHP STN SZL ZMW, whose Commons categories hold nothing that passes (copyrighted notes, tiny files, or only dealer scans of colonial issues). 50 currencies have no banknote; 28 of them do have coins, among them DKK, NZD, COP, VND, ZAR, ISK, CUP and DOP, for which Commons holds only 19th-century private bank notes, correctly scored out.
+
+### Attribution rules
+
+- Wikidata is CC0; say "Datos: Wikidata" and link `https://www.wikidata.org/wiki/<qid>`.
+- Every image links its Commons file page and shows `license` and `artist` as given. The ECB, Bank of Israel, Bank of Korea and Indian government permissions are not free licenses: show them verbatim, never relabel them "public domain". Banknote designs belong to their issuers; we show photographs and scans as Commons hosts them and host nothing ourselves.
+- Never crop out a "SPECIMEN" overprint or a watermark; never present a note as current unless `year` or `series` in the data says so.
+
+### Run locally
+
+```sh
+npm run money                                  # ~30 s from the cache; 16 min and 1,900 requests from empty
+MONEY_ONLY=MXN,JPY,EUR npm run money           # a few codes
+MONEY_ONLY=KRW MONEY_DEBUG=1 npm run money     # prints roots, denomination categories and the top 20 scored titles
+rm -r data/cache/commons                       # fresh search results (the refresh)
+```
+
+On Windows PowerShell: `$env:MONEY_ONLY = "MXN,JPY"; npm run money`. Check the console summary, then open `public/data/money.json` and look at `USD`, `EUR`, `JPY`, `BRL` (should read as today's notes) and `MXN` (older issues, by Commons' limits, not ours). Commit the file.
