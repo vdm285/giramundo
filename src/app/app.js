@@ -9,6 +9,7 @@ import { ALIAS_NOTES, norm } from '../data/aliases.js';
 import { formatTime } from '../data/format.js';
 import { nameWater } from '../geo/oceans.js';
 import { haversineKm } from '../geo/math.js';
+import { geoContains } from 'd3-geo';
 // The 3D engine is loaded on demand (see mountSurface), so the flat map
 // path never downloads Three.js.
 import { createFlatMap } from '../flat/map.js';
@@ -399,16 +400,19 @@ function syncMarkers() {
     if (!c.ll || !c.iso2 || c.onMap) continue;
     if (dist < 3.2 || c.iso2 === s.id) markers.push({ lat: c.ll[0], lon: c.ll[1], id: c.iso2, color: '#f6d78a', size: 9, kind: 'country' });
   }
-  // City dots only when the reader is close in on the selected country, not
-  // at the world scale; the country-focus view will own this later.
+  // In focus mode the state polygons carry the view: no dots at the country
+  // level; cities only inside the chosen state; heritage pins only in Lugares.
+  const inFocusCountry = s.focus && s.adminLevel === 1;
+  const inState = s.focus && s.adminLevel === 2 && s.state;
   const cities = country?.iso2 ? world.cities?.[country.iso2] : null;
-  if (cities && (dist < 1.5 || s.city)) {
+  if (cities && !inFocusCountry && (inState || dist < 1.5 || s.city)) {
     for (const c of cities) {
+      if (inState && !geoContains(s.state, [c.ll[1], c.ll[0]])) continue;
       markers.push({ lat: c.ll[0], lon: c.ll[1], id: c.id, color: c.capital ? '#ffd27a' : '#fff4dc', size: c.capital ? 9 : 7, kind: 'city', city: c, highlight: s.city?.id === c.id });
     }
   }
   const places = country?.iso2 ? world.places?.[country.iso2]?.heritage : null;
-  if (places && (s.section === 'lugares' || dist < 2.2)) {
+  if (places && (s.section === 'lugares' || (!s.focus && dist < 2.2))) {
     for (const p of places) {
       if (!p.ll) continue;
       markers.push({ lat: p.ll[0], lon: p.ll[1], id: p.qid, color: '#8fd5ff', size: 7, kind: 'place', place: p, highlight: s.place === p });
@@ -714,6 +718,14 @@ async function on(action, payload) {
     case 'set-home':
       if (s.id) { store.set({ home: s.id }); writeSetting('home', s.id); }
       break;
+    case 'focus-mode': {
+      store.set({ focusMode: payload });
+      writeSetting('focusMode', payload);
+      const c = countryOf(s.id);
+      if (!payload && s.focus) exitFocus();
+      else if (payload && c) select(c.iso2 || c.placeId);
+      break;
+    }
     case 'spin':
       store.set({ spin: payload });
       writeSetting('spin', payload);
@@ -790,6 +802,7 @@ function shell(s) {
       <h3>${t(s.lang, 'homeBase')}: ${countryOf(s.home)?.name?.[s.lang] || s.home}</h3>
       <div class="opts"><button @click=${() => on('set-home')} ?disabled=${!s.id || s.id === s.home}>${t(s.lang, 'setHome')}</button></div>
       <label class="row"><input type="checkbox" .checked=${s.spin} @change=${(e) => on('spin', e.target.checked)}> ${t(s.lang, 'spin')}</label>
+      <label class="row"><input type="checkbox" .checked=${s.focusMode} @change=${(e) => on('focus-mode', e.target.checked)}> ${t(s.lang, 'focusMode')}</label>
       <label class="row">${t(s.lang, 'sunOffset')} <input type="range" min="-12" max="12" step="0.5" .value=${String(s.sun)} @input=${(e) => on('sun', Number(e.target.value))}> <button type="button" class="chip" @click=${() => on('sun', 0)}>${t(s.lang, 'sunNow')}</button></label>
       <h3>${t(s.lang, 'about')}</h3>
       <p class="help">${t(s.lang, 'aboutLead')} ${t(s.lang, 'aboutP2')}</p>
