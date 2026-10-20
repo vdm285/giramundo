@@ -1,7 +1,7 @@
 // Things to do: the guess-the-country game, tours, and compare.
 // Pure logic over the store; app.js injects what it needs and renders.
 
-import { haversineKm } from '../geo/math.js';
+import { haversineKm, rotateFeature } from '../geo/math.js';
 import { buildJourneys } from './tours.js';
 
 const GAME_COLORS = ['#2b5fa8', '#6fbfa0', '#f6e27a', '#f08a3c', '#d7301f'];
@@ -232,6 +232,10 @@ export function createPlay({ store, world, surface, select, flyToCountry }) {
       sf.clearArcs();
       sf.addArc({ lat: a.ll[0], lon: a.ll[1] }, { lat: b.ll[0], lon: b.ll[1] }, { color: '#7fd1ff' });
       sf.setCompare(world.features.find((f) => f.properties.iso2 === iso2) || null);
+      // True-size overlay: the selected country's outline carried onto the
+      // compared country by a rotation of the sphere, so its size is honest.
+      const own = world.features.find((f) => f.properties.iso2 === a.iso2);
+      if (own) sf.setGhost?.(rotateFeature(own, { lat: a.ll[0], lon: a.ll[1] }, { lat: b.ll[0], lon: b.ll[1] }));
       const mid = { lat: (a.ll[0] + b.ll[0]) / 2, lon: a.ll[1] + ((((b.ll[1] - a.ll[1]) + 540) % 360) - 180) / 2 };
       const km = haversineKm({ lat: a.ll[0], lon: a.ll[1] }, { lat: b.ll[0], lon: b.ll[1] });
       sf.flyTo(mid.lat, mid.lon, Math.min(5.5, 1.8 + km / 2500));
@@ -243,6 +247,7 @@ export function createPlay({ store, world, surface, select, flyToCountry }) {
     const sf = surface();
     sf?.clearArcs();
     sf?.setCompare(null);
+    sf?.setGhost?.(null);
   }
 
   return {

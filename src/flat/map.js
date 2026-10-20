@@ -36,6 +36,7 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
   let style = 'earth';
   let selected = null;
   let hover = null;
+  let ghost = null;
   let markers = [];
   let beacon = null;
   let colorFor = null;
@@ -241,6 +242,17 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
       const x = x0 + off * worldW;
       ctx.save();
       ctx.translate(off * worldW, 0);
+      // True-size overlay: the selected shape rotated onto the compared country.
+      if (ghost) {
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = '#7fd1ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); path(ghost); ctx.stroke();
+        ctx.fillStyle = 'rgba(127,209,255,0.18)';
+        ctx.beginPath(); path(ghost); ctx.fill();
+        ctx.restore();
+      }
       // Hover and selection.
       if (hover && hover !== selected) {
         ctx.fillStyle = 'rgba(255,255,255,0.14)';
@@ -379,6 +391,7 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
     setSelected(f) { selected = f; dirty = true; },
     setHover(f) { if (hover !== f) { hover = f; dirty = true; } },
     setCompare() {},
+    setGhost(f) { ghost = f || null; dirty = true; },
     setDataColors(fn) { colorFor = fn; colorVersion += 1; dirty = true; },
     setMarkers(list) { markers = list; dirty = true; },
     setBeacon(lat, lon) { beacon = lat == null ? null : { lat, lon }; dirty = true; },

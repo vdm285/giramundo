@@ -213,7 +213,9 @@ const COMMON_CITY_WORDS = new Set([
   'barcelona', 'cartagena', 'guadalajara', 'cuenca', 'leon', 'san juan', 'santa ana', 'la plata',
   'hamilton', 'kingston', 'plymouth', 'birmingham', 'manchester', 'cambridge', 'london', 'newcastle',
   'portland', 'durham', 'lancaster', 'alexandria', 'tripoli', 'hyderabad', 'concepcion', 'bucaramanga',
-  'kayes', 'groningen',
+  'kayes', 'groningen', 'callao', 'san lorenzo', 'san miguel', 'san pedro', 'san francisco', 'santa fe',
+  'san antonio', 'san martin', 'san carlos', 'san luis', 'san fernando', 'san isidro', 'la union', 'colon',
+  'el carmen', 'la victoria', 'florida', 'formosa', 'corrientes', 'independencia', 'libertad', 'progreso',
 ]);
 
 // Country names (or demonyms) that are also something else; same rule.
@@ -238,9 +240,14 @@ const CITY_ALIASES = {
 // Phrases that contain a place name but are not that place. Consumed before
 // matching so "Little Hong Kong" does not file a Lanzhou walk under HK.
 const NOT_PLACES = [
-  'little hong kong', 'little italy', 'little india', 'little tokyo', 'little havana', 'little saigon',
   'new mexico', 'new england', 'new jersey', 'new south wales', 'french fries', 'french toast', 'turkish ice cream',
   'india pale ale', 'english breakfast', 'spanish rice', 'mexico86',
+];
+// "Little Italy", "Rome of the North", "Venice of the Alps": a place name used
+// as a comparison, not as the place. The whole phrase is consumed.
+const NOT_PLACE_PATTERNS = [
+  /\blittle [\p{L}' .-]+?(?=[^\p{L}' .-]|$)/gu,
+  /\b[\p{L}'.-]+ of the (north|south|east|west|alps|andes|orient|caribbean|balkans|baltic|pacific|atlantic|middle east)\b/gu,
 ];
 
 // Regions, islands and famous districts people name instead of the country
@@ -379,6 +386,9 @@ function matchTitle(title, home) {
     const i = text.indexOf(phrase);
     if (i >= 0) taken.push([i, i + phrase.length]);
   }
+  for (const re of NOT_PLACE_PATTERNS) {
+    for (const m of text.matchAll(re)) taken.push([m.index, m.index + m[0].length]);
+  }
   const flags = flagsIn(title).filter((f) => isoSet.has(f.iso));
   for (const n of names) {
     const m = n.re.exec(text);
@@ -397,7 +407,15 @@ function matchTitle(title, home) {
     if (!n.common && !n.ambiguous) return true;
     return countriesNamed.has(n.iso) || home === n.iso;
   };
-  const good = found.filter(ok).sort((a, b) => a.n.tier - b.n.tier || a.index - b.index);
+  // Rank: the channel's own country first; then cities, except a city in a
+  // country the title does not name while it names another one ("Trier,
+  // Germany: Rome of the North"); then countries; then demonyms; then by position.
+  const rank = (f) => {
+    const n = f.n;
+    if (n.tier === 0) return countriesNamed.size && !countriesNamed.has(n.iso) ? 1.5 : 0;
+    return n.tier;
+  };
+  const good = found.filter(ok).sort((a, b) => (Number(b.n.iso === home) - Number(a.n.iso === home)) || (rank(a) - rank(b)) || (a.index - b.index));
   if (!good.length) return home ? { iso: home, cityId: null, place: null, via: 'channel' } : null;
   const f = good[0];
   return { iso: f.n.iso, cityId: f.n.cityId, place: f.n.place, via: ['city', 'country', 'demonym'][f.n.tier] };
@@ -448,8 +466,12 @@ await pool(resolved, POOL, async (ch) => {
     stats.feedErrors.push(`@${ch.handle}: ${err.message}`);
     return;
   }
+  const seenTitles = new Set();
   for (const it of items) {
     stats.videos += 1;
+    const tkey = fold(it.title);
+    if (seenTitles.has(tkey)) continue;
+    seenTitles.add(tkey);
     const m = matchTitle(it.title, ch.home);
     if (!m) continue;
     if (seenIds.has(`${m.iso}|${it.id}`)) continue;

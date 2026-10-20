@@ -85,6 +85,41 @@ export function raySphere(origin, dir, radius) {
   };
 }
 
+/**
+ * Move a GeoJSON feature on the sphere so that point `from` lands on point
+ * `to`, by the rotation that carries one unit vector onto the other. Shape
+ * and size are preserved on the globe (a translation in lat/lon would not
+ * be). Used by the true-size overlay in Compare.
+ */
+export function rotateFeature(feature, from, to) {
+  const a = latLonToVector(from.lat, from.lon);
+  const b = latLonToVector(to.lat, to.lon);
+  // Rodrigues' rotation about axis a x b by the angle between a and b.
+  const axis = { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+  const sin = Math.hypot(axis.x, axis.y, axis.z);
+  const cos = a.x * b.x + a.y * b.y + a.z * b.z;
+  if (sin < 1e-9) return feature;
+  const k = { x: axis.x / sin, y: axis.y / sin, z: axis.z / sin };
+  const rot = ([lon, lat]) => {
+    const v = latLonToVector(lat, lon);
+    const dot = k.x * v.x + k.y * v.y + k.z * v.z;
+    const cross = { x: k.y * v.z - k.z * v.y, y: k.z * v.x - k.x * v.z, z: k.x * v.y - k.y * v.x };
+    const r = {
+      x: v.x * cos + cross.x * sin + k.x * dot * (1 - cos),
+      y: v.y * cos + cross.y * sin + k.y * dot * (1 - cos),
+      z: v.z * cos + cross.z * sin + k.z * dot * (1 - cos),
+    };
+    const ll = vectorToLatLon(r);
+    return [ll.lon, ll.lat];
+  };
+  const mapRings = (rings) => rings.map((ring) => ring.map(rot));
+  const g = feature.geometry;
+  const geometry = g.type === 'Polygon'
+    ? { type: 'Polygon', coordinates: mapRings(g.coordinates) }
+    : { type: 'MultiPolygon', coordinates: g.coordinates.map(mapRings) };
+  return { type: 'Feature', properties: { ...feature.properties, ghost: true }, geometry };
+}
+
 export function shortestLonDelta(from, to) {
   return wrapLon(to - from);
 }

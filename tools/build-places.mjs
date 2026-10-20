@@ -11,7 +11,7 @@
 // the 60 s WDQS limit, and 429 Retry-After is honored by fetchRetry.
 // Re-run: npm run places
 
-import { writeFile, stat } from 'node:fs/promises';
+import { readFile, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { root, sparql as sparqlRaw, loadFacts, today, round } from './net.mjs';
 
@@ -495,3 +495,4 @@ console.log(`wrote ${OUT} (${(size / 1024).toFixed(0)} KB)`);
 console.log(`heritage: ${stats.withHeritage} countries, ${stats.sites} sites, ${stats.sitesWithImage} with image, ${stats.sitesWithLl} with coordinates; capped at ${MAX_HERITAGE}: ${stats.capped.join(' ') || 'none'}`);
 console.log(`cuisine: ${stats.withCuisine} countries; dishes: ${stats.withDishes} countries, ${stats.dishes} dishes`);
 console.log(`anthem: ${stats.withAnthem} countries; demonym: ${stats.withDemonym} countries`);
+console.log(`local labels: ${localStats.langs.size} languages, ${localStats.queries} label queries; dishes ${localStats.dishes} (${localStats.dishesDiffer} differ from es/en), cuisines ${localStats.cuisines}, sites ${localStats.sites}`);

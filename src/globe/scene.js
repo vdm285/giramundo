@@ -270,6 +270,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     camera.updateProjectionMatrix();
     outlineMat.resolution.set(w * pixelRatio, h * pixelRatio);
     outlineGlowMat.resolution.set(w * pixelRatio, h * pixelRatio);
+    ghostMat.resolution.set(w * pixelRatio, h * pixelRatio);
   }
 
   function sunVector() {
@@ -300,6 +301,37 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
       y: rect.top + (-v.y * 0.5 + 0.5) * rect.height,
       depth: p.z,
     };
+  }
+
+  // A second outline in the compare color: the selected country's shape
+  // rotated onto the compared one (true-size overlay).
+  const ghostMat = new LineMaterial({
+    color: new THREE.Color(ACCENT2), linewidth: 2, worldUnits: false, transparent: true, opacity: 0.95, depthTest: true, depthWrite: false, dashed: true, dashSize: 0.02, gapSize: 0.012,
+  });
+  let ghost = null;
+  function segmentsOf(feature) {
+    const segs = [];
+    const polys = feature.geometry.type === 'Polygon' ? [feature.geometry.coordinates] : feature.geometry.coordinates;
+    for (const poly of polys) {
+      for (const ring of poly) {
+        for (let i = 0; i < ring.length - 1; i++) {
+          const a = latLonToVector(ring[i][1], ring[i][0], 1.0036);
+          const b = latLonToVector(ring[i + 1][1], ring[i + 1][0], 1.0036);
+          segs.push(a.x, a.y, a.z, b.x, b.y, b.z);
+        }
+      }
+    }
+    return segs;
+  }
+  function setGhost(feature) {
+    if (ghost) { outlineGroup.remove(ghost); ghost.geometry.dispose(); ghost = null; }
+    if (!feature) { dirtyFrames = 4; return; }
+    const geom = new LineSegmentsGeometry();
+    geom.setPositions(segmentsOf(feature));
+    ghost = new LineSegments2(geom, ghostMat);
+    ghost.computeLineDistances();
+    outlineGroup.add(ghost);
+    dirtyFrames = 4;
   }
 
   function setOutline(feature) {
@@ -615,6 +647,7 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     },
     setHover(feature) { uniforms.hoverId.value = feature ? feature.properties.id : 0; },
     setCompare(feature) { uniforms.compareId.value = feature ? feature.properties.id : 0; },
+    setGhost,
     setDataColors(colorFor) {
       // colorFor(feature) -> '#rrggbb' or null when there is no data.
       dataPalette.clear();

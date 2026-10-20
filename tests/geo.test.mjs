@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { feature } from 'topojson-client';
 import {
-  antipode, haversineKm, latLonToUv, latLonToVector, raySphere, subsolarPoint, vectorToLatLon, wrapLon,
+  antipode, haversineKm, latLonToUv, latLonToVector, raySphere, subsolarPoint, vectorToLatLon, wrapLon, rotateFeature,
 } from '../src/geo/math.js';
 import { applyDrag, frontPoint, quaternionForView } from '../src/geo/orient.js';
 import { makeIndex } from '../src/geo/pick.js';
@@ -140,4 +140,22 @@ test('antipode and distance', () => {
   assert.ok(km > 8500 && km < 11000, km);
   assert.equal(wrapLon(190), -170);
   assert.equal(wrapLon(-190), 170);
+});
+
+test('rotateFeature carries a shape onto another point without changing its size', () => {
+  // A small square around Mexico City, moved onto Tokyo.
+  const square = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[-99.6, 19.0], [-98.6, 19.0], [-98.6, 20.0], [-99.6, 20.0], [-99.6, 19.0]]] } };
+  const from = { lat: 19.5, lon: -99.1 };
+  const to = { lat: 35.68, lon: 139.69 };
+  const moved = rotateFeature(square, from, to);
+  const ring = moved.geometry.coordinates[0];
+  const cLon = ring.slice(0, 4).reduce((a, p) => a + p[0], 0) / 4;
+  const cLat = ring.slice(0, 4).reduce((a, p) => a + p[1], 0) / 4;
+  assert.ok(Math.abs(cLat - to.lat) < 0.6, `centroid lat ${cLat}`);
+  assert.ok(Math.abs(cLon - to.lon) < 0.8, `centroid lon ${cLon}`);
+  // Edge lengths on the sphere stay the same (within 1%).
+  const km = (a, b) => haversineKm({ lat: a[1], lon: a[0] }, { lat: b[1], lon: b[0] });
+  const before = km(square.geometry.coordinates[0][0], square.geometry.coordinates[0][2]);
+  const after = km(ring[0], ring[2]);
+  assert.ok(Math.abs(before - after) / before < 0.01, `${before} vs ${after}`);
 });
