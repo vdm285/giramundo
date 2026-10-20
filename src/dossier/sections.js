@@ -290,7 +290,7 @@ export function renderVer(m) {
   const current = content.video || vids[0] || null;
   const ll = country.capitalLL || country.ll;
   const name = country.name[lang] || country.name.en;
-  const kinds = [['walk', 'seeWalks'], ['food', 'seeFood'], ['drone', 'seeDrone']];
+  const kinds = [['walk', 'seeWalks'], ['food', 'seeFood'], ['drone', 'seeDrone'], ['sounds', 'seeSounds']];
   const streetLink = ll ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${ll[0]},${ll[1]}` : '';
   const mapsLink = ll ? `https://www.google.com/maps/search/?api=1&query=${ll[0]},${ll[1]}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
   const osm = ll ? `https://www.openstreetmap.org/?mlat=${ll[0]}&mlon=${ll[1]}#map=6/${ll[0]}/${ll[1]}` : '';

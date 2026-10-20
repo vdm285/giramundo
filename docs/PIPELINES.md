@@ -109,6 +109,8 @@ Per country it collects:
 
 Labels fall back es ← mul ← en and en ← mul ← es. Wikidata stores a name that is the same in every language ("Marcha Real", "Kimigayo") under the `mul` language only; without that fallback Spain has no anthem.
 
+- **Local labels** (added 2026-10-20): every dish, the cuisine and every heritage site also carry `label.local`, the Wikidata label in the country's first language, so the card can show the dish as locals write it (寿司, ผัดไทย, Kölner Dom). The language is `facts.json` `languages[0]` (ISO 639-3) mapped to a Wikidata code through the `LANG_CODES` table in the script (spa→es, jpn→ja, zho→zh, nor→nb/no…); when the code is not in the table, the country's most-spoken official language from `culture.json` (`languages[0].code`, Wikidata P218) is used; else `null`. The chosen code is written once per country as `localLang`, and repeated on each dish as `localLang` for convenience. For es/en countries the existing label is reused (no query); for the other 62 languages the items are queried in batches of 200 per language (`VALUES ?item {…} ?item rdfs:label ?l FILTER(LANG(?l) IN ("ja","mul"))`), `mul` as the fallback, about 60 extra queries once (cached). `label.local` is `null` when Wikidata has no label in that language (all of Bolivia's dishes under Aymara, Vanuatu under Bislama, Greenland under Greenlandic). Caveat: `facts.json` lists a country's languages alphabetically, so the "first" one is Arabic for Israel, German for Belgium, French for Switzerland, English for India and Aymara for Bolivia; to change a country's language, change the order in `facts.json` or the mapping in the script, not the output.
+
 WDQS specifics: the join order of the two heavy queries is pinned with `hint:Query hint:optimizer "None"` (left to itself Blazegraph starts from "every item with a photo" and hits the 60 s limit); queries are batched 25 countries at a time; a 1.5 s gap is left between live queries because WDQS answers bursts from one client with 429 and a Retry-After, which `fetchRetry` honors. A full run from an empty cache is about 25 queries and under 3 minutes.
 
 ### When
@@ -130,12 +132,13 @@ On demand. The output is **committed** (`public/data/places.json`, about 600 KB)
       "qid": "Q96",
       "demonym": { "es": "mexicano", "en": "Mexican" },
       "anthem": { "qid": "Q200742", "es": "Himno Nacional Mexicano", "en": "National Anthem of Mexico" },
-      "cuisine": { "qid": "Q207965", "label": { "es": "gastronomía de México", "en": "Mexican cuisine" },
+      "localLang": "es",
+      "cuisine": { "qid": "Q207965", "label": { "es": "gastronomía de México", "en": "Mexican cuisine", "local": "gastronomía de México" },
                    "wiki": { "es": "https://es.wikipedia.org/wiki/…", "en": "https://en.wikipedia.org/wiki/Mexican_cuisine" } },
-      "dishes": [ { "qid": "Q191655", "label": { "es": "taco", "en": "taco" }, "image": "001 Tacos de carnitas, carne asada y al pastor.jpg" } ],
+      "dishes": [ { "qid": "Q191655", "label": { "es": "taco", "en": "taco", "local": "taco" }, "localLang": "es", "image": "001 Tacos de carnitas, carne asada y al pastor.jpg" } ],
       "heritage": [
         { "qid": "Q5859", "whs": "483",
-          "label": { "es": "Chichén Itzá", "en": "Chichen Itza" },
+          "label": { "es": "Chichén Itzá", "en": "Chichen Itza", "local": "Chichén Itzá" },
           "desc": { "es": "sitio arqueológico de la península de Yucatán…", "en": "pre-Columbian Maya city in Mexico" },
           "ll": [20.6831, -88.5686],
           "image": "Chichen Itza 3.jpg",
@@ -151,7 +154,7 @@ On demand. The output is **committed** (`public/data/places.json`, about 600 KB)
 
 `image` is a Wikimedia Commons **file name**, not a URL. The site builds thumbnails itself: `https://commons.wikimedia.org/wiki/Special:FilePath/<encodeURIComponent(image)>?width=640`, and links the file page `https://commons.wikimedia.org/wiki/File:<image>` for the credit.
 
-Counts on 2026-10-16: 174 countries with at least one site, 1,172 site entries (1,134 with image, 1,157 with coordinates, 111 transboundary repeats); 194 countries with a cuisine item, 112 with dishes (519 dishes); 237 anthems (missing: PT, whose Wikidata item has no P85, EH, and small territories); 235 demonyms.
+Counts on 2026-10-16: 174 countries with at least one site, 1,172 site entries (1,134 with image, 1,157 with coordinates, 111 transboundary repeats); 194 countries with a cuisine item, 112 with dishes (519 dishes); 237 anthems (missing: PT, whose Wikidata item has no P85, EH, and small territories); 235 demonyms. Local labels on 2026-10-20: 64 languages (AQ has none), 465 of 519 dishes have `label.local` and 280 of those differ from both es and en; 182 of 194 cuisines and 1,067 of 1,172 sites have one. The file is 671 KB (cap: keep it under 2 MB).
 
 ### Attribution rules
 
@@ -235,6 +238,66 @@ On Windows PowerShell: `$env:YOUTUBE_API_KEY = "AIza..."; npm run videos`.
    ```
 
    Run it with `continue-on-error: true` like the news step, and schedule it at most once a day (the quota is daily). Without the secret the step still succeeds and ships the seed.
+
+## Walks (keyless)
+
+### What runs
+
+`npm run walks` → `node tools/build-walks.mjs`. Writes `public/data/walks/{iso2 lowercase}.json` plus `index.json`, **not committed** (`.gitignore`), deploy-time like news. No key: YouTube publishes an Atom feed per channel, `https://www.youtube.com/feeds/videos.xml?channel_id=UC…`, with the 15 latest videos (`yt:videoId`, `title`, `published`, `media:thumbnail`). The same endpoint takes `playlist_id=PL…` if a playlist is ever wanted.
+
+The source is a **curated list of 40 travel channels** at the top of the script (`CHANNELS`: handle, kind, home country), verified on 2026-10-20: 29 walking-tour channels (Rambalac, NIPPON WANDERING TV, Tokyo Explorer, Seoul Walker, Walk East, Walking in India, Ambient Walking, LATIN WALKS, MADRID WALK, Mexico Caminando, Caminando por México, Prowalk Tours, Watched Walker, POPtravel, 4K Urban Life, HP Walking Tours, BookingHunterTV, World Walking Tours, 4K WALK, Wind Walk Travel Videos, BLA BLA WALKER, One Man Wolf Pack, World Wanderings, LADmob, Walk The Tour, Through Streets & Tastes, Walking OZ, and the Spanish-language travel vloggers alanxelmundo and Luisito Comunica), 7 food channels (Mark Wiens, Best Ever Food Review Show, The Food Ranger, Davidsbeenhere, STREET FOOD KING, TabiEats, La Ruta de la Garnacha), 3 scenic/drone channels (Drone Snap, Relaxation Film, Scenic Relaxation) and 1 city-sounds channel (Nomadic Ambience). `kind` (`walk | food | drone | sounds`) is the channel's genre, not a per-video judgment: a Luisito Comunica vlog about a cantina is filed as `walk`. The handle → `channel_id` lookup reads `<meta itemprop="identifier" content="UC…">` (or `"externalId"`) from `https://www.youtube.com/@handle` and is cached 30 days in `data/cache/youtube-rss/channels.json`; a handle that 404s is cached 7 days and reported, never guessed. To add a channel, append it to `CHANNELS` and run `WALKS_DRY=1 npm run walks`, which resolves and prints every channel without fetching feeds. Many plausible handles are squatted or dead (`@JapanWalk` is an Indonesian vlog, `@WalkingPeru` a shoe shop, `@CityWalks` a treadmill channel): always read the channel's recent titles before keeping it.
+
+**Matching** is by title only. Every city name in `cities.json` (es and en, plus a few aliases: NYC/Manhattan, CDMX, Saigon, Bombay, Puebla), every country name in `facts.json` (es/en, plus aliases such as Turkey, UK/England/Scotland, Holland, Korea, Czech Republic, USA), a table of regions and islands people name instead of the country (Sicily, Bali, Yucatán, Santorini, Shibuya…), the demonyms from `places.json` ("Mexican", "Somali") and flag emoji (🇲🇽 → MX) are folded (accents stripped, lowercase) and matched longest-first on word boundaries. A city match wins over a country name, which wins over a demonym; among equals, the first in the title. Guards: a city name that is also an ordinary word or a first name (Nice, Tours, Split, Reading, Como, Lagos, Victoria, Callao, San Lorenzo…) or that exists in several countries (Valencia, Tripoli, Hyderabad, Hamilton) counts only when the title also names the country (or shows its flag) or the channel is about that country; "Little Italy", "Rome of the North", "Venice of the Alps", "New Mexico", "French fries" are consumed before matching; when the title names a country, a city from another country is demoted ("Trier, Germany … Rome of the North" → DE). A channel with a `home` country (Rambalac → JP) files titles that name no place under that country with `place: null` and `via: "channel"`, and its own country wins ties ("De Sol a Callao … Madrid" → Madrid, not Callao, Peru). Titles are also de-duplicated per channel (re-uploads).
+
+Politeness: 3 requests in flight, starts 400 ms apart, `fetchRetry` (3 attempts), feeds cached 6 h in `data/cache/youtube-rss/<channelId>.xml`. A full run from an empty cache is about 80 requests and 40 s; from the cache, a second. A feed that fails is reported and skipped; the run goes on.
+
+### When
+
+Recommendation: run it in `.github/workflows/pages.yml` on the same schedule as news (every 6 hours, `0 */6 * * *`, plus every push and `workflow_dispatch`), after `npm test` and before `npm run build`, with `continue-on-error: true`. The feeds change a few times a day at most, so 6 h matches the cache TTL and keeps the stored titles far inside YouTube's 30-day refresh rule. The one line to add next to the news step is:
+
+```yaml
+      - run: npm run walks
+```
+
+(with `continue-on-error: true` on the step, like news). No secret is needed. It is a separate file set from `videos/` (the Data API sweep), so both can ship; the card can show walks first and fall back to videos.
+
+### Output
+
+`public/data/walks/{iso2}.json`, capped at **24** per country, newest first but round-robin across channels so one prolific channel does not fill the list, and channel-only matches after titled ones:
+
+```json
+{
+  "iso2": "MX",
+  "built": "2026-10-20T19:00:17Z",
+  "items": [
+    { "id": "IO9nezGv06A", "kind": "food", "title": "TACOS al CARBON BARATOS VS CAROS en CDMX",
+      "channel": "La Ruta de la Garnacha", "place": "Mexico City", "cityId": "mx-mexico-city",
+      "published": "2026-10-18T17:00:15+00:00", "thumb": "https://i2.ytimg.com/vi/IO9nezGv06A/hqdefault.jpg",
+      "via": "city" }
+  ]
+}
+```
+
+`place` is the English city name from `cities.json` and `cityId` its slug, both `null` when only the country matched; `via` says how the item was filed: `city`, `country` (name, alias, region or flag), `demonym`, or `channel` (no place in the title; the channel's home country). `thumb` is the feed's thumbnail URL (`i*.ytimg.com`), `null` if the feed had none. `published` is the feed's ISO timestamp.
+
+`public/data/walks/index.json`: `{ built, source, attribution, channels: [ { handle, id, name, kind, home } ], countries: { "MX": { items: 24, cities: 4, kinds: { walk: 17, food: 6, sounds: 1 } } } }`. A country with no match has no file and no index entry; the card must cope.
+
+Counts on 2026-10-20: 40 channels, 592 videos in the feeds, 521 filed (251 by city, 209 by country, 9 by demonym, 52 channel-only) into 68 countries, 80 distinct cities; MX 24 (CDMX, Puebla, Mérida, Monterrey), JP 24 (Tokyo, Kyoto, Osaka), FR 14 (Paris, Lyon, Marseille). 69 files, 134 KB in total. Coverage follows the channel list: Europe, East and South Asia, Mexico and the Southern Cone are good; Africa and Central Asia appear only when a world channel passes through.
+
+Known risks: demonym matches are the weakest tier ("Indian cooking" filmed in Malaysia; "Greek yogurt"); a drone channel's "Canada Autumn" is scenery, not a city; a title naming two places files under the first ("Laos & Cambodia" → LA); Spanish vlogs (Luisito, Alan) are travel vlogs, not silent 4K walks, and carry `kind: "walk"` because that is the channel's genre. When a wrong item shows up, the fix is in the script's lists (`COMMON_CITY_WORDS`, `NOT_PLACES`, `REGION_ALIASES`, `COUNTRY_ALIASES`), never in the output.
+
+### Attribution and policy rules
+
+Same as Videos: we store only IDs and a snapshot of title, channel and thumbnail URL; the site re-reads title and channel through oEmbed when it shows a video, plays through the official `youtube-nocookie.com` embed, shows the channel name, links to YouTube and never hosts or re-encodes anything. The feeds are public and keyless; we read 40 of them every 6 hours, which is what a feed reader does. Titles are shown as the channel wrote them.
+
+### Run locally
+
+```sh
+npm run walks                 # ~80 requests, ~40 s from an empty cache; then cached 6 h
+WALKS_DRY=1 npm run walks     # resolve the channel list only, print id, kind, home, name
+```
+
+On Windows PowerShell: `$env:WALKS_DRY = "1"; npm run walks`. Check the console summary, then `public/data/walks/index.json` and `mx.json`, `jp.json`, `fr.json`. The folder is gitignored; do not commit it.
 
 ## Radio
 
