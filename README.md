@@ -20,6 +20,23 @@ Open http://localhost:5173. For headlines locally, run `npm run news` once (it t
 
 The gear at the right end of the bottom dock opens the only settings menu: visual quality (Automatic, Full, Simple, or the flat map), which country opens when there is no link (country of the day, your home country, where you are, random, or the last one you saw), your home country, the idle spin, and a slider to move the sun. Everything is stored in the browser only. A shared link always opens the country in the link.
 
+## If it feels slow
+
+The globe is drawn by your graphics card. If it stutters in every mode, the browser is almost certainly drawing with the processor instead. The app detects this and shows a notice with the fix; here it is in full.
+
+**Chrome or Edge on Windows**
+
+1. Paste `chrome://settings/system` (Edge: `edge://settings/system`) in the address bar and turn on **Use graphics acceleration when available**. Relaunch the browser.
+2. Paste `chrome://gpu` and check that **WebGL** and **WebGL2** say *Hardware accelerated*.
+3. If they still say software: update your graphics driver, then in Windows Settings → System → Display → Graphics, add your browser and set it to **High performance**.
+4. Open Giramundo, press the gear, and read the **Performance** line. It should name your graphics card (for example "NVIDIA GeForce"), not "Microsoft Basic Render Driver" or "SwiftShader".
+
+**Firefox**: `about:preferences` → Performance → uncheck *Use recommended settings* and check *Use hardware acceleration when available*; `about:support` shows the GPU under Graphics.
+
+**Safari**: acceleration is always on; if it is slow, close other GPU-heavy tabs.
+
+If none of that helps, the gear menu has **Sencilla** (fewer effects) and the **flat map**, which runs on any machine.
+
 `npm run build` makes the static site in `dist/`. GitHub Pages publishes `main`, on every push and on a schedule every six hours so the headlines stay fresh.
 
 ## What is where

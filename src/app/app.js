@@ -12,7 +12,13 @@ import { haversineKm } from '../geo/math.js';
 // The 3D engine is loaded on demand (see mountSurface), so the flat map
 // path never downloads Three.js.
 import { createFlatMap } from '../flat/map.js';
-import { renderDossier } from '../dossier/dossier.js';
+import { renderDossier, splitBills } from '../dossier/dossier.js';
+
+// The banknotes on screen: today's by default, historical behind the toggle.
+function shownBills(code, old) {
+  const { current, old: hist } = splitBills(world?.money?.[code]?.banknotes || []);
+  return old ? hist : (current.length ? current : hist);
+}
 import * as live from '../live/sources.js';
 import { createRadio, shortName } from '../live/radio.js';
 import { buildPrompt } from '../live/ask.js';
@@ -40,6 +46,7 @@ let surface = null;
 let store;
 let token = 0;
 let suggestedFlat = false;
+let slowWarned = false;
 let searchIndex = -1;
 
 // ---------- helpers ----------
@@ -364,6 +371,21 @@ async function mountSurface(flat) {
   applyDataColors();
   syncMarkers();
   if (country?.ll && keep) flyToCountry(country);
+  // Software rendering (no graphics card in play) is the one cause of lag
+  // the app cannot fix; it can at least say so and show the setting.
+  if (!flat && !slowWarned) {
+    setTimeout(() => {
+      const gpu = String(next.getInfo?.().gpu || '');
+      if (/basic render|swiftshader|llvmpipe|software|mesa offscreen|warp/i.test(gpu)) {
+        slowWarned = true;
+        const lang = store.get().lang;
+        toast(t(lang, 'slowTitle'), [
+          { label: t(lang, 'slowHow'), run: () => { store.set({ toast: null }); document.getElementById('slowhelp')?.showModal(); } },
+          { label: t(lang, 'slowFlat'), quiet: true, run: () => on('flat', true) },
+        ]);
+      }
+    }, 1500);
+  }
   return next;
 }
 
@@ -531,9 +553,10 @@ async function on(action, payload) {
       break;
     }
     case 'read': store.set({ readOpen: { ...s.readOpen, [payload]: !s.readOpen?.[payload] } }); break;
+    case 'money-old': store.set({ moneyOld: !s.moneyOld, moneyIdx: 0, moneyHold: Date.now() }); break;
     case 'money-step': {
       const code = countryOf(s.id)?.currencies?.[0]?.code;
-      const n = world.money?.[code]?.banknotes?.length || 1;
+      const n = shownBills(code, s.moneyOld).length || 1;
       store.set({ moneyIdx: (s.moneyIdx + payload + n) % n, moneyHold: Date.now() });
       break;
     }
@@ -690,6 +713,20 @@ function shell(s) {
             : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, money: world.money, compareCountry: s.compare ? world.byIso.get(s.compare) : null, on, base, feature: featureOf(country), stationFor: (l) => stationForLanguage(country?.iso2, l) })}
       </div>
     </aside>
+    <dialog id="slowhelp" class="settings">
+      <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
+      <h2>${t(s.lang, 'slowTitle')}</h2>
+      <p>${t(s.lang, 'slowLead')}</p>
+      <h3>Chrome · Edge</h3>
+      <p>1. ${t(s.lang, 'slowChrome1')}</p>
+      <p class="row"><code>chrome://settings/system</code> <button class="chip" @click=${() => navigator.clipboard?.writeText('chrome://settings/system').then(() => toast(t(s.lang, 'copied')))}>${t(s.lang, 'copy')}</button></p>
+      <p>2. ${t(s.lang, 'slowChrome2')}</p>
+      <p class="row"><code>chrome://gpu</code> <button class="chip" @click=${() => navigator.clipboard?.writeText('chrome://gpu').then(() => toast(t(s.lang, 'copied')))}>${t(s.lang, 'copy')}</button></p>
+      <p>3. ${t(s.lang, 'slowChrome3')}</p>
+      <h3>Firefox</h3>
+      <p>${t(s.lang, 'slowFirefox')}</p>
+      <p class="help">${t(s.lang, 'slowMeanwhile')}${s.perf ? html` · ${t(s.lang, 'perf')}: ${s.perf.gpu}` : nothing}</p>
+    </dialog>
     <dialog id="about">
       <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
       <h2>Giramundo</h2>
@@ -945,7 +982,7 @@ export async function boot({ wire = false } = {}) {
     if (s.collapsed || s.game || s.city || document.visibilityState !== 'visible') return;
     if (s.moneyHold && Date.now() - s.moneyHold < 8000) return;
     const code = countryOf(s.id)?.currencies?.[0]?.code;
-    const n = world.money?.[code]?.banknotes?.length || 0;
+    const n = shownBills(code, s.moneyOld).length;
     if (n > 1 && s.section === 'historia') store.set({ moneyIdx: (s.moneyIdx + 1) % n });
   }, 4000);
   // Performance readout, refreshed only while the settings dialog is open.

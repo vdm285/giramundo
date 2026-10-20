@@ -75,6 +75,7 @@ Status on 2026-10-16: phases 1 to 4 shipped in their first versions (see `HANDOF
 - Radio: AI subtitles or live translation; a "talk only" filter if the reader wants speech, not music.
 - Performance: a true lightweight mode that still shows the features (flat map, no clouds or relief, smaller plates, deferred data). The first paint should not wait for places, radio or indicators.
 - Phone layout polish; VR.
+- Time: a slider to travel back in time per country (borders, names, money, population), paired one day with the scale slider from the long-horizon note: a crosshair of space (micro to macro) and time (past to now). No forward slider for human affairs; only curated astronomical events (eclipses, transits) would extend into the future. Money is the first candidate: current notes by default, historical notes behind the time control.
 - **The long horizon, in a footnote.** Giramundo is the Earth level of a larger family Victor imagines: zoom out to the solar system, the Milky Way and galaxy clusters (NASA imagery, astronomy); zoom in from Earth to a city, to a person, to organs, tissues, cells, molecules, atoms, particles. Each level would be its own repository with its own focus, linked to its neighbors by a deliberate "step up / step down" control, never by an accidental scroll. Modular by design, so one level can be world-class without waiting for the others. Giramundo should stay the best Earth level it can be; the only thing it owes that future is clean interfaces and good docs.
 
 ## Modes and settings
