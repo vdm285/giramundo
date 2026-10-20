@@ -46,126 +46,50 @@ const DRY = !!process.env.WALKS_DRY;
 // WALKS_DRY=1 npm run walks; a handle that does not resolve is reported and
 // skipped, never guessed.
 const CHANNELS = [
-  // walking tours
+  // walking tours (4K city walks)
   ['Rambalac', 'walk', 'JP'],
   ['NIPPONWANDERINGTV', 'walk', 'JP'],
   ['TokyoExplorer', 'walk', 'JP'],
-  ['JapanWalk', 'walk', 'JP'],
   ['SeoulWalker', 'walk', 'KR'],
+  ['WalkEast', 'walk', 'CN'],
+  ['WalkinginIndia', 'walk', 'IN'],
+  ['AmbientWalking', 'walk', 'SG'],
+  ['LatinWalks', 'walk', 'AR'],
+  ['MadridWalk', 'walk', 'ES'],
+  ['MexicoWalkingTours', 'walk', 'MX'],
+  ['CaminandoPorMexico', 'walk', 'MX'],
   ['ProwalkTours', 'walk', null],
   ['WatchedWalker', 'walk', null],
-  ['POPtravel', 'walk', null],
-  ['KeeziWalks', 'walk', null],
+  ['poptravelorg', 'walk', null],
   ['4KUrbanLife', 'walk', null],
-  ['VirtualWalk', 'walk', null],
-  ['NomadWalks', 'walk', null],
-  ['WalkingToursbyKarl', 'walk', null],
   ['HPWalkingTours', 'walk', null],
   ['BookingHunterTV', 'walk', null],
-  ['4KWalk', 'walk', null],
-  ['WanderlustTravelVideos', 'walk', null],
-  ['EuropeWalks', 'walk', null],
-  ['WindWalk', 'walk', null],
-  ['WindWalkTravelVideos', 'walk', null],
-  ['CityWalks', 'walk', null],
-  ['LatinWalks', 'walk', null],
-  ['ActionKid', 'walk', 'US'],
-  ['WalkEast', 'walk', null],
-  ['WorldWalkingTours', 'walk', null],
-  ['TheGlobalWalk', 'walk', null],
-  ['AmbientWalking', 'sounds', null],
-  ['NomadicAmbience', 'sounds', null],
-  ['Walk4K', 'walk', null],
-  ['JUTUBER', 'walk', null],
-  ['SeongJaeWalk', 'walk', 'KR'],
-  ['ChinaWalkingTours', 'walk', 'CN'],
-  ['BeijingWalker', 'walk', 'CN'],
-  ['WalkingTourSpain', 'walk', 'ES'],
-  ['SpainWalks', 'walk', 'ES'],
-  ['MadridWalk', 'walk', 'ES'],
-  ['ParisWalks', 'walk', 'FR'],
-  ['WalkingMexico', 'walk', 'MX'],
-  ['CaminandoCDMX', 'walk', 'MX'],
-  ['WalkingBogota', 'walk', 'CO'],
-  ['CaminandoBuenosAires', 'walk', 'AR'],
-  ['BuenosAiresWalks', 'walk', 'AR'],
-  ['WalkingPeru', 'walk', 'PE'],
-  ['UmbrellaWalk', 'walk', null],
-  ['DreamyWalks', 'walk', null],
-  ['RelaxingWalker', 'walk', null],
-  ['TravelWalks4K', 'walk', null],
-  ['ThroughMyLens', 'walk', null],
-  ['Mapmaker', 'walk', null],
-  ['WalkWithMe', 'walk', null],
-  ['LivingWalks', 'walk', null],
-  ['WalkRideFly', 'walk', null],
-  ['Nomadic', 'walk', null],
   ['WorldWalkingTour', 'walk', null],
-  ['WALKS_and_the_CITY', 'walk', null],
+  ['4KWalk', 'walk', null],
+  ['WindWalkTravelVideos', 'walk', null],
   ['BlaBlaWalker', 'walk', null],
   ['OneManWolfPack', 'walk', null],
   ['4KWorldWandering', 'walk', null],
   ['LADmob', 'walk', null],
   ['walkthetour', 'walk', null],
   ['ThroughStreetsAndTastes', 'walk', null],
-  ['WalkinginIndia', 'walk', 'IN'],
   ['WalkingOZ', 'walk', null],
-  ['narramundos', 'walk', null],
-  ['JumpingPlaces', 'walk', null],
-  ['TreadmillTV', 'walk', null],
-  ['MexicoWalkingTours', 'walk', 'MX'],
-  ['CaminandoPorMexico', 'walk', 'MX'],
-  ['CDMXWalk', 'walk', 'MX'],
-  ['WalkingTourMexico', 'walk', 'MX'],
-  ['LimaWalk', 'walk', 'PE'],
-  ['SantiagoWalk', 'walk', 'CL'],
-  ['BogotaWalk', 'walk', 'CO'],
-  ['CaminandoBogota', 'walk', 'CO'],
-  ['poptravelorg', 'walk', null],
+  ['AlanxelMundo', 'walk', null],
+  ['luisitocomunica', 'walk', null],
   // street food
   ['MarkWiens', 'food', null],
   ['BestEverFoodReviewShow', 'food', null],
   ['TheFoodRanger', 'food', null],
-  ['StrictlyDumpling', 'food', null],
-  ['ChopstickTravel', 'food', null],
   ['Davidsbeenhere', 'food', null],
-  ['AdenFilms', 'food', null],
-  ['YummyBoy', 'food', null],
-  ['SettimeTravel', 'food', null],
-  ['LaRutadelaGarnacha', 'food', 'MX'],
-  ['AlexTienda', 'food', null],
-  ['AlanxelMundo', 'walk', null],
-  ['StreetFoodMexico', 'food', 'MX'],
-  ['ComidaCallejeraMX', 'food', 'MX'],
-  ['TacosdeCanasta', 'food', 'MX'],
-  ['ElMundoDeDaniel', 'food', null],
-  ['FoodieLand', 'food', null],
-  ['KevinsKitchenAdventures', 'food', null],
-  ['TravelThirsty', 'food', null],
-  ['StreetFoodTV', 'food', null],
-  ['TabiEats', 'food', 'JP'],
   ['sfk', 'food', null],
-  ['luisitocomunica', 'walk', null],
-  // drone / aerial
-  ['ScenicRelaxation', 'drone', null],
-  ['RelaxationFilm', 'drone', null],
-  ['4KRelaxationChannel', 'drone', null],
-  ['NatureRelaxationFilms', 'drone', null],
+  ['TabiEats', 'food', 'JP'],
+  ['LaRutadelaGarnacha', 'food', 'MX'],
+  // drone / aerial / scenic
   ['DroneSnap', 'drone', null],
-  ['AerialCinematics', 'drone', null],
-  ['TheRelaxedGuy', 'drone', null],
-  ['BeautifulWorld', 'drone', null],
-  ['PlanetRelax', 'drone', null],
-  ['AmazingPlacesOnOurPlanet', 'drone', null],
-  ['TripAway', 'drone', null],
-  ['SunnyDroneFilms', 'drone', null],
+  ['RelaxationFilm', 'drone', null],
   ['ScenicRelaxationFilms', 'drone', null],
   // city sounds
-  ['CitySounds', 'sounds', null],
-  ['JapanAmbience', 'sounds', 'JP'],
-  ['TokyoAmbience', 'sounds', 'JP'],
-  ['WanderInRain', 'sounds', null],
-  ['CalmedByNature', 'sounds', null],
+  ['NomadicAmbience', 'sounds', null],
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -300,6 +224,74 @@ const COMMON_COUNTRY_WORDS = new Set([
 ]);
 
 // Names people write that facts.json does not: aliases -> ISO2.
+// City names people write that cities.json does not carry: cityId -> names.
+const CITY_ALIASES = {
+  'us-new-york-city': ['New York', 'NYC', 'Manhattan', 'Nueva York'],
+  'us-washington': ['Washington DC', 'Washington D.C.', 'Washington, D.C.'],
+  'mx-mexico-city': ['CDMX', 'Ciudad de Mexico'],
+  'mx-puebla-city': ['Puebla'],
+  'vn-ho-chi-minh-city': ['Saigon', 'Ho Chi Minh', 'Saigón'],
+  'in-mumbai': ['Bombay'],
+  'cn-guangzhou': ['Canton'],
+};
+
+// Phrases that contain a place name but are not that place. Consumed before
+// matching so "Little Hong Kong" does not file a Lanzhou walk under HK.
+const NOT_PLACES = [
+  'little hong kong', 'little italy', 'little india', 'little tokyo', 'little havana', 'little saigon',
+  'new mexico', 'new england', 'new jersey', 'new south wales', 'french fries', 'french toast', 'turkish ice cream',
+  'india pale ale', 'english breakfast', 'spanish rice', 'mexico86',
+];
+
+// Regions, islands and famous districts people name instead of the country
+// -> ISO2 (tier 1, same weight as the country name).
+const REGION_ALIASES = {
+  US: ['California', 'Texas', 'Florida', 'Hawaii', 'Hawái', 'Alaska', 'Arizona', 'Nevada', 'Colorado', 'Utah', 'Oregon', 'Oahu', 'Maui', 'Upstate New York', 'New England'],
+  IT: ['Sicily', 'Sicilia', 'Sardinia', 'Sardegna', 'Cerdeña', 'Tuscany', 'Toscana', 'Venice', 'Venecia', 'Venezia', 'Amalfi', 'Capri', 'Positano', 'Sorrento', 'Florence', 'Florencia', 'Firenze', 'Lake Como'],
+  ES: ['Andalusia', 'Andalucía', 'Catalonia', 'Cataluña', 'Mallorca', 'Majorca', 'Ibiza', 'Tenerife', 'Canary Islands', 'Islas Canarias', 'Seville'],
+  FR: ['Provence', 'Normandy', 'Normandía', 'Brittany', 'Bretaña', 'Corsica', 'Córcega', 'French Riviera', "Côte d'Azur", 'Antibes'],
+  DE: ['Bavaria', 'Baviera', 'Black Forest'],
+  GB: ['Edinburgh', 'Edimburgo', 'Cornwall', 'Lake District'],
+  JP: ['Okinawa', 'Hokkaido', 'Kyushu', 'Mt. Fuji', 'Mount Fuji', 'Monte Fuji', 'Shibuya', 'Shinjuku', 'Akihabara', 'Harajuku', 'Nara'],
+  GR: ['Crete', 'Creta', 'Santorini', 'Mykonos', 'Rhodes', 'Rodas', 'Corfu', 'Athens', 'Atenas'],
+  PT: ['Madeira', 'Azores', 'Algarve', 'Lisbon', 'Lisboa'],
+  ID: ['Bali', 'Ubud', 'Java', 'Lombok', 'Sumatra'],
+  TZ: ['Zanzibar', 'Zanzíbar', 'Serengeti', 'Kilimanjaro'],
+  MX: ['Yucatán', 'Yucatan', 'Riviera Maya', 'Teotihuacan', 'Teotihuacán', 'Cancun', 'Cancún', 'Puerto Vallarta', 'Baja California', 'Tulum', 'Oaxaca', 'Chiapas'],
+  TH: ['Phuket', 'Chiang Mai', 'Krabi', 'Koh Samui', 'Pattaya'],
+  IN: ['Goa', 'Kerala', 'Rajasthan', 'Jodhpur', 'Jaipur', 'Varanasi', 'Old Delhi', 'Dharavi'],
+  TR: ['Cappadocia', 'Capadocia', 'Antalya', 'Istanbul', 'Estambul'],
+  AE: ['Abu Dhabi', 'Abu Dabi'],
+  BR: ['Copacabana', 'Ipanema', 'Amazonas'],
+  PE: ['Machu Picchu', 'Cusco', 'Cuzco'],
+  AR: ['Clorinda'],
+  CL: ['Atacama', 'Torres del Paine'],
+  CU: ['La Habana', 'Havana'],
+  VN: ['Ha Long', 'Halong', 'Hoi An', 'Da Nang'],
+  KR: ['Gangnam', 'Hongdae', 'Myeongdong', 'Busan'],
+  CN: ['Lanzhou', 'Guiyang', 'Nanchang', 'Changsha', 'Huaihua', 'Xian', "Xi'an"],
+  EG: ['Giza', 'Pyramids of Giza'],
+  KE: ['Masai Mara', 'Ol Pejeta'],
+  SC: ['Praslin', 'La Digue', 'Mahé', 'Mahe'],
+  MV: ['Hulhumale', 'Himmafushi'],
+  NL: ['Zaanse Schans', 'Zaandam'],
+  HR: ['Dubrovnik'],
+  BA: ['Travnik'],
+  PK: ['Lahore', 'Karachi'],
+};
+
+// 🇲🇽 -> MX: a pair of regional indicator symbols, which many channels put in titles.
+function flagsIn(title) {
+  const out = [];
+  const re = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
+  let m;
+  while ((m = re.exec(title))) {
+    const iso = String.fromCharCode(...[...m[0]].map((ch) => ch.codePointAt(0) - 0x1F1E6 + 65));
+    out.push({ iso, index: m.index });
+  }
+  return out;
+}
+
 const COUNTRY_ALIASES = {
   TR: ['Turkey', 'Turkiye', 'Turquia'],
   CZ: ['Czech Republic', 'República Checa'],
@@ -321,7 +313,7 @@ const COUNTRY_ALIASES = {
   TW: ['Taipei', 'Taipéi'],
 };
 
-const { facts } = await loadFacts();
+const { facts, iso2: isoSet } = await loadFacts();
 const cities = JSON.parse(await readFile(join(root, 'public/data/cities.json'), 'utf8'));
 let demonyms = {};
 try {
@@ -343,6 +335,17 @@ const names = [];
       }
     }
   }
+  for (const [cityId, list] of Object.entries(CITY_ALIASES)) {
+    const iso = cityId.slice(0, 2).toUpperCase();
+    const city = (cities.countries[iso] || []).find((c) => c.id === cityId);
+    if (!city) continue;
+    for (const a of list) {
+      const key = fold(a);
+      if (!cityByKey.has(key)) cityByKey.set(key, new Set());
+      cityByKey.get(key).add(iso);
+      names.push({ key, tier: 0, iso, cityId, place: city.name.en, common: COMMON_CITY_WORDS.has(key) || key.length <= 3 });
+    }
+  }
   for (const n of names) n.ambiguous = cityByKey.get(n.key).size > 1;
   const seen = new Set(names.map((n) => `${n.key}|${n.iso}`));
   const addCountry = (iso, text, tier) => {
@@ -355,6 +358,7 @@ const names = [];
     addCountry(c.iso2, c.name.en, 1);
     addCountry(c.iso2, c.name.es, 1);
     for (const a of COUNTRY_ALIASES[c.iso2] || []) addCountry(c.iso2, a, 1);
+    for (const a of REGION_ALIASES[c.iso2] || []) addCountry(c.iso2, a, 1);
     const d = demonyms[c.iso2];
     if (d?.en) addCountry(c.iso2, d.en, 2);
     if (d?.es) addCountry(c.iso2, d.es, 2);
@@ -371,6 +375,11 @@ function matchTitle(title, home) {
   const text = fold(title);
   const taken = []; // [start, end] spans already matched by a longer name
   const found = []; // { name, index }
+  for (const phrase of NOT_PLACES) {
+    const i = text.indexOf(phrase);
+    if (i >= 0) taken.push([i, i + phrase.length]);
+  }
+  const flags = flagsIn(title).filter((f) => isoSet.has(f.iso));
   for (const n of names) {
     const m = n.re.exec(text);
     if (!m) continue;
@@ -380,6 +389,7 @@ function matchTitle(title, home) {
     taken.push([s, e]);
     found.push({ n, index: s });
   }
+  for (const f of flags) found.push({ n: { key: '', tier: 1, iso: f.iso, cityId: null, place: null, common: false, ambiguous: false }, index: f.index });
   if (!found.length) return home ? { iso: home, cityId: null, place: null, via: 'channel' } : null;
   const countriesNamed = new Set(found.filter((f) => f.n.tier === 1 && !f.n.ambiguous && !f.n.common).map((f) => f.n.iso));
   const ok = (f) => {

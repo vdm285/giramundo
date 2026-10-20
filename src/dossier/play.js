@@ -106,6 +106,14 @@ export function renderCompare(m) {
     <div class="crow"><span></span><strong>${flag(a)}${name(a)}</strong><strong><button class="chip" style="min-height:28px;padding:0 8px" @click=${() => on('go', b.iso2)}>${flag(b)}${name(b)}</button></strong></div>
     ${km != null ? row(t(lang, 'distance'), `${formatCount(km, lang)} km`, '') : nothing}
     ${row(t(lang, 'population'), formatCompact(a.population, lang), formatCompact(b.population, lang))}
+    ${a.population && b.population ? (() => {
+      // People as dots: one dot per million, two colors, one grid; the eye
+      // compares counts without reading. Capped at 400 dots per country.
+      const da = Math.min(400, Math.round(a.population / 1e6));
+      const db = Math.min(400, Math.round(b.population / 1e6));
+      return html`<div class="dots-grid" aria-hidden="true">${Array.from({ length: da }, () => html`<i></i>`)}${Array.from({ length: db }, () => html`<i class="b"></i>`)}</div>
+        <p class="dots-note">${t(lang, 'dotsNote')} <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink-2)"></i> ${name(a)} · <i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#7fb2d9"></i> ${name(b)}${a.population / 1e6 > 400 || b.population / 1e6 > 400 ? (lang === 'es' ? ' · recortado a 400 puntos' : ' · capped at 400 dots') : ''}</p>`;
+    })() : nothing}
     ${row(t(lang, 'area'), a.area ? `${formatCompact(a.area, lang)} km²` : '—', b.area ? `${formatCompact(b.area, lang)} km²` : '—')}
     ${row(t(lang, 'density'), a.population && a.area ? nf(Math.round(a.population / a.area), 0) : '—', b.population && b.area ? nf(Math.round(b.population / b.area), 0) : '—')}
     ${ind('lifeExp')}${ind('gdpPc')}${ind('internet')}${ind('urban')}${ind('forest')}

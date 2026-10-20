@@ -35,7 +35,91 @@ function renderMoney(m) {
       <div class="label"><span><b>${bill.denomination ? `${bill.denomination} ` : ''}${name}</b>${rate ? html`<br>${rate}` : nothing}</span>
         <a class="credit" style="position:static;background:none;padding:0" href=${commonsPage(bill.file)} target="_blank" rel="noreferrer">${bill.license || 'Commons'}</a></div>
     </div>
-    ${cur.coins?.length ? html`<div class="coins">${cur.coins.slice(0, 8).map((c) => html`<a href=${commonsPage(c.file)} target="_blank" rel="noreferrer" title=${`${c.denomination || ''} · ${c.license || ''}`}><img loading="lazy" src=${commonsThumb(c.file, 160)} alt=""></a>`)}</div>` : nothing}`;
+    ${cur.coins?.length ? html`<div class="coins">${cur.coins.slice(0, 8).map((c) => html`<a href=${commonsPage(c.file)} target="_blank" rel="noreferrer" title=${`${c.denomination || ''} · ${c.license || ''}`}><img loading="lazy" src=${commonsThumb(c.file, 160)} alt=""></a>`)}</div>` : nothing}
+    ${renderConverter(m, code, name, perUsd)}
+    ${renderRateLine(m, code)}`;
+}
+
+// A 24-hour ring: day half, night half, their hour hand and yours.
+function hourIn(zone, date = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(date);
+    const h = Number(parts.find((p) => p.type === 'hour')?.value || 0);
+    const mi = Number(parts.find((p) => p.type === 'minute')?.value || 0);
+    return h + mi / 60;
+  } catch { return null; }
+}
+
+function renderSunClock(zone, lang) {
+  const theirs = hourIn(zone);
+  const mine = new Date().getHours() + new Date().getMinutes() / 60;
+  if (theirs == null) return nothing;
+  const ang = (h) => ((h / 24) * 360 - 90) * Math.PI / 180;
+  const hand = (h, r) => `${(22 + r * Math.cos(ang(h))).toFixed(1)},${(22 + r * Math.sin(ang(h))).toFixed(1)}`;
+  // Day from 6 to 18 on the ring (a sketch, not the sunrise table).
+  const arc = (a, b, r) => {
+    const s = ang(a); const e = ang(b);
+    return `M22,22 L${(22 + r * Math.cos(s)).toFixed(1)},${(22 + r * Math.sin(s)).toFixed(1)} A${r},${r} 0 0 1 ${(22 + r * Math.cos(e)).toFixed(1)},${(22 + r * Math.sin(e)).toFixed(1)} Z`;
+  };
+  const label = `${t(lang, 'themNow')} ${String(Math.floor(theirs)).padStart(2, '0')}:${String(Math.round((theirs % 1) * 60)).padStart(2, '0')} · ${t(lang, 'youAre')} ${String(Math.floor(mine)).padStart(2, '0')}:${String(Math.round((mine % 1) * 60)).padStart(2, '0')}`;
+  return html`<svg class="sunclock" viewBox="0 0 44 44" role="img" aria-label=${label}><title>${label}</title>
+    <circle cx="22" cy="22" r="20" class="night"></circle>
+    <path class="day" d=${arc(6, 18, 20)}></path>
+    <circle cx="22" cy="22" r="20" class="rim"></circle>
+    <line class="hand home" x1="22" y1="22" x2=${hand(mine, 14).split(',')[0]} y2=${hand(mine, 14).split(',')[1]}></line>
+    <line class="hand" x1="22" y1="22" x2=${hand(theirs, 17).split(',')[0]} y2=${hand(theirs, 17).split(',')[1]}></line>
+    <circle cx="22" cy="22" r="2.2" fill="#fff"></circle>
+  </svg>`;
+}
+
+// 100 USD, precomputed in the local currency and in pesos; the amount is editable.
+function renderConverter(m, code, name, perUsd) {
+  const { lang, content, on } = m;
+  if (!perUsd || code === 'USD') return nothing;
+  const amount = m.convertAmount || 100;
+  const nf = (n) => new Intl.NumberFormat(lang === 'es' ? 'es-MX' : 'en-US', { maximumFractionDigits: n >= 100 ? 0 : 2 }).format(n);
+  const mxn = content.rates?.usd?.MXN;
+  return html`<div class="convert">
+    <input type="text" inputmode="decimal" .value=${String(amount)} aria-label=${t(lang, 'convert')} @change=${(e) => on('convert', e.target.value)}>
+    <span>USD =</span>
+    <b>${nf(amount * perUsd)} ${code}</b>
+    ${mxn && code !== 'MXN' ? html`<span class="muted">· ${nf(amount * mxn)} MXN</span>` : nothing}
+  </div>`;
+}
+
+function renderRateLine(m, code) {
+  const { lang, content } = m;
+  const h = content.rateHistory;
+  if (!h?.days?.length || code === 'USD') return nothing;
+  const series = h.perUsd.map((v) => (v == null ? null : v));
+  const pts = series.map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (pts.length < 10) return nothing;
+  const W = 440;
+  const H = 64;
+  const padT = 8;
+  const padB = 14;
+  const vals = pts.map((p) => p[1]);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const span = max - min || 1;
+  const sx = (i) => (i / (series.length - 1)) * W;
+  const sy = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
+  const d = pts.map(([i, v], k) => `${k ? 'L' : 'M'}${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join('');
+  const area = `${d}L${sx(pts.at(-1)[0]).toFixed(1)},${H - padB}L${sx(pts[0][0]).toFixed(1)},${H - padB}Z`;
+  const first = vals[0];
+  const last = vals.at(-1);
+  const change = ((last - first) / first) * 100;
+  const nf = (n) => new Intl.NumberFormat(lang === 'es' ? 'es-MX' : 'en-US', { maximumSignificantDigits: 4 }).format(n);
+  return html`
+    <svg class="rateline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label=${t(lang, 'rateYear')}>
+      <path class="fill" d=${area}></path>
+      <path class="line" d=${d}></path>
+      <text x="0" y=${H - 3}>${h.days[0].slice(0, 7)}</text>
+      <text x=${W} y=${H - 3} text-anchor="end">${h.days.at(-1).slice(0, 7)}</text>
+      <text x="0" y="9">${nf(min)}</text>
+      <text x=${W} y="9" text-anchor="end">${nf(max)}</text>
+    </svg>
+    <p class="money-meta"><span>${t(lang, 'rateYear')}: 1 USD = ${nf(last)} ${code}</span><span style=${`color:${change > 0 ? 'var(--coral)' : '#1e7a3c'}`}>${change > 0 ? '+' : ''}${change.toFixed(1)}% ${lang === 'es' ? 'frente al dólar' : 'vs the dollar'}</span></p>`;
 }
 import { disputeNote } from '../data/disputed.js';
 import { haversineKm } from '../geo/math.js';
@@ -146,6 +230,7 @@ export function renderDossier(m) {
       ${dispute ? html`<aside class="note"><strong>${t(lang, 'disputed')}</strong><p>${dispute}</p></aside>` : nothing}
       ${section === 'historia' ? html`
         <div class="capsule">
+          ${zone ? renderSunClock(zone, lang) : nothing}
           ${capital && country.iso2 !== 'PS' ? html`<span><b>${capital}</b></span>` : nothing}
           ${country.population ? html`<span>${formatCompact(country.population, lang)} ${lang === 'es' ? 'personas' : 'people'}</span>` : nothing}
           ${country.languages?.length ? html`<span>${languageNames(country.languages.slice(0, 2), lang).join(', ')}</span>` : nothing}

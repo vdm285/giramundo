@@ -145,6 +145,7 @@ async function loadContent(country) {
   live.holidaysToday(iso).then((holidays) => patch({ holidays }));
   live.nextHoliday(iso).then((nextHoliday) => patch({ nextHoliday }));
   live.rates().then((rates) => patch({ rates }));
+  live.rateHistory(country.currencies?.[0]?.code).then((rateHistory) => patch({ rateHistory }));
   live.quakesWeek().then((quakes) => patch({ quakes }));
   live.wikiToday(lang).then((today) => patch({ today }));
   live.wikiMostRead(lang).then((mostRead) => patch({ mostRead }));
@@ -524,6 +525,11 @@ async function on(action, payload) {
       break;
     }
     case 'ask-edit': store.set({ ask: { text: String(payload).slice(0, 1800) } }); break;
+    case 'convert': {
+      const n = Number(String(payload).replace(/[^\d.]/g, ''));
+      store.set({ convertAmount: Number.isFinite(n) && n > 0 ? n : 100 });
+      break;
+    }
     case 'read': store.set({ readOpen: { ...s.readOpen, [payload]: !s.readOpen?.[payload] } }); break;
     case 'money-step': {
       const code = countryOf(s.id)?.currencies?.[0]?.code;
@@ -848,6 +854,7 @@ export async function boot({ wire = false } = {}) {
     readOpen: {},
     moneyIdx: 0,
     ask: null,
+    convertAmount: 100,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));

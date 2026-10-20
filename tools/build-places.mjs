@@ -77,6 +77,36 @@ const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, 
 //    (Antarctica, Cyprus) the one with more sitelinks wins.
 
 const { facts } = await loadFacts();
+
+// ---------------------------------------------------------------------------
+// 0. Local language per country, for label.local ("what locals call it").
+//    facts.json lists ISO 639-3 codes; Wikidata labels use (mostly) ISO 639-1.
+//    The country's first language is mapped through LANG_CODES; when it is
+//    not in the table, the country's most-spoken official language from
+//    culture.json (languages[0].code, Wikidata P218) is used; else null.
+
+const LANG_CODES = {
+  spa: 'es', eng: 'en', fra: 'fr', por: 'pt', deu: 'de', ita: 'it', jpn: 'ja', kor: 'ko', zho: 'zh', ara: 'ar',
+  rus: 'ru', hin: 'hi', tur: 'tr', nld: 'nl', pol: 'pl', ell: 'el', heb: 'he', fas: 'fa', tha: 'th', vie: 'vi',
+  ind: 'id', msa: 'ms', swa: 'sw', ukr: 'uk', ces: 'cs', hun: 'hu', ron: 'ro', swe: 'sv', nor: 'no', dan: 'da',
+  fin: 'fi', cat: 'ca', sqi: 'sq', hye: 'hy', aze: 'az', ben: 'bn', bel: 'be', bul: 'bg', khm: 'km', hrv: 'hr',
+  est: 'et', amh: 'am', kat: 'ka', isl: 'is', kaz: 'kk', kir: 'ky', lao: 'lo', lav: 'lv', lit: 'lt', div: 'dv',
+  mon: 'mn', mya: 'my', afr: 'af', nep: 'ne', mkd: 'mk', srp: 'sr', slk: 'sk', slv: 'sl', sin: 'si', bos: 'bs',
+  grn: 'gn', aym: 'ay', urd: 'ur', uzb: 'uz', tgk: 'tg', tuk: 'tk', mlt: 'mt', gle: 'ga', prs: 'fa', nno: 'nn',
+  kal: 'kl', cnr: 'cnr', dzo: 'dz', som: 'so', tir: 'ti', mlg: 'mg', nya: 'ny', sna: 'sn', kin: 'rw', run: 'rn',
+  tet: 'tet', fil: 'tl', tgl: 'tl', smo: 'sm', ton: 'to', fij: 'fj', bis: 'bi', hat: 'ht', pap: 'pap', lux: 'lb', ltz: 'lb',
+};
+let cultureLangs = {};
+try {
+  const culture = JSON.parse(await readFile(join(root, 'public/data/culture.json'), 'utf8'));
+  for (const [iso, c] of Object.entries(culture.countries || {})) cultureLangs[iso] = (c.languages || []).map((l) => l.code).filter(Boolean);
+} catch { cultureLangs = {}; }
+function localLangOf(c) {
+  const first = (c.languages || [])[0];
+  if (first && LANG_CODES[first]) return LANG_CODES[first];
+  return (cultureLangs[c.iso2] || [])[0] || null;
+}
+
 const isoRows = await sparql(`
 SELECT ?c ?iso ?links WHERE {
   ?c wdt:P297 ?iso ; wikibase:sitelinks ?links .
@@ -389,6 +419,75 @@ for (const c of countries) {
   if (entry.anthem) stats.withAnthem += 1;
   if (entry.demonym) stats.withDemonym += 1;
 }
+
+// ---------------------------------------------------------------------------
+// 7. Local labels: what locals call the dish (and the cuisine and the sites),
+//    i.e. the Wikidata label in the country's first language (see step 0).
+//    es/en countries reuse the label already fetched; the rest are queried
+//    per language in batches, with the "mul" label as a fallback (a name that
+//    is the same in every language). null when Wikidata has no label.
+
+const localStats = { dishes: 0, dishesDiffer: 0, cuisines: 0, sites: 0, langs: new Set(), queries: 0 };
+{
+  const WD_LANGS = { no: ['nb', 'no'] }; // Wikidata codes that differ from the table
+  const want = new Map(); // lang -> Map(qid -> [objects whose label gets .local])
+  for (const c of facts.countries) {
+    const entry = out.countries[c.iso2];
+    if (!entry) continue;
+    const lang = localLangOf(c);
+    entry.localLang = lang;
+    const targets = [...entry.dishes, ...entry.heritage, ...(entry.cuisine ? [entry.cuisine] : [])];
+    for (const t of targets) t.label = { ...t.label, local: null };
+    for (const d of entry.dishes) d.localLang = lang;
+    if (!lang) continue;
+    if (lang === 'es' || lang === 'en') {
+      for (const t of targets) t.label.local = t.label[lang];
+      continue;
+    }
+    const m = want.get(lang) || new Map();
+    for (const t of targets) {
+      if (!m.has(t.qid)) m.set(t.qid, []);
+      m.get(t.qid).push(t);
+    }
+    want.set(lang, m);
+  }
+  for (const [lang, m] of want) {
+    const codes = WD_LANGS[lang] || [lang];
+    for (const batch of chunk([...m.keys()], 200)) {
+      let rows;
+      try {
+        rows = await sparql(`
+SELECT ?item ?l WHERE {
+  VALUES ?item { ${batch.map(wd).join(' ')} }
+  ?item rdfs:label ?l .
+  FILTER(LANG(?l) IN (${[...codes, 'mul'].map((x) => `"${x}"`).join(', ')}))
+}`, `labels ${lang}`);
+      } catch {
+        continue; // this language keeps local: null; the run goes on
+      }
+      localStats.queries += 1;
+      const got = new Map(); // qid -> { text, mul }
+      for (const b of rows) {
+        const q = qid(v(b, 'item'));
+        const mul = b.l['xml:lang'] === 'mul';
+        const prev = got.get(q);
+        if (!prev || (prev.mul && !mul)) got.set(q, { text: v(b, 'l'), mul });
+      }
+      for (const [q, { text }] of got) for (const t of m.get(q)) t.label.local = text;
+    }
+  }
+  for (const entry of Object.values(out.countries)) {
+    if (entry.localLang) localStats.langs.add(entry.localLang);
+    for (const d of entry.dishes) {
+      if (!d.label.local) continue;
+      localStats.dishes += 1;
+      if (d.label.local !== d.label.es && d.label.local !== d.label.en) localStats.dishesDiffer += 1;
+    }
+    if (entry.cuisine?.label.local) localStats.cuisines += 1;
+    localStats.sites += entry.heritage.filter((s) => s.label.local).length;
+  }
+}
+out.notes += ' label.local = the label in the country\'s first language (localLang, from facts.json languages[0]), mul as fallback, null when Wikidata has none.';
 
 await writeFile(OUT, JSON.stringify(out));
 const { size } = await stat(OUT);

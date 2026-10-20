@@ -386,13 +386,31 @@ export function renderDatos(m) {
       ${sparkline(pop, world.pophistory.start, lang)}
       <p class="small muted">${formatCount(pop[0], lang)} (${world.pophistory.start}) → ${formatCount(pop.at(-1), lang)} (${world.pophistory.start + pop.length - 1}) · ${t(lang, 'dataSource')}</p>` : nothing}
     <h2>${lang === 'es' ? 'Indicadores' : 'Indicators'}</h2>
-    ${rows.map(({ key, def, v, rank, n }) => html`
-      <div class="ind">
-        <div class="k">${def.label?.[lang] || key}<small>${def.unit?.[lang] || ''}${v ? ` · ${v[1]}` : ''}${rank ? ` · #${rank} ${t(lang, 'dataRank')} ${n}` : ''}</small></div>
-        <div class="v">${v ? nf(v[0], def.decimals ?? 1) : html`<span class="muted small">${t(lang, 'dataNoData')}</span>`}</div>
-        <button title=${t(lang, 'dataPaint')} aria-pressed=${indicator === key && m.view === 'data'} @click=${() => on('paint', key)}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
-        </button>
-      </div>`)}
+    <p class="legend-dots"><span><i style="background:var(--coral)"></i>${t(lang, 'stripMe')}</span>${m.home && m.home !== iso ? html`<span><i style="border:2px solid var(--ink-2);width:6px;height:6px"></i>${t(lang, 'stripHome')} (${world.byIso.get(m.home)?.name?.[lang] || m.home})</span>` : nothing}</p>
+    ${rows.map(({ key, def, v, rank, n }) => {
+      // Position strip: where this country sits between the world's lowest
+      // and highest, with the home country as a reference dot. Rank-based
+      // placement, so skewed indicators (GDP) still spread out.
+      const all = Object.values(def.values || {}).map((x) => x[0]).sort((a, b) => a - b);
+      const pos = (val) => (val == null || !all.length ? null : (all.findIndex((x) => x >= val) / Math.max(1, all.length - 1)) * 100);
+      const me = v ? pos(v[0]) : null;
+      const homeV = m.home && m.home !== iso ? def.values?.[m.home]?.[0] : null;
+      const hp = homeV != null ? pos(homeV) : null;
+      return html`
+      <div class="ind strips">
+        <div class="top">
+          <div class="k">${def.label?.[lang] || key}<small>${def.unit?.[lang] || ''}${v ? ` · ${v[1]}` : ''}${rank ? ` · #${rank} ${t(lang, 'dataRank')} ${n}` : ''}</small></div>
+          <div class="v">${v ? nf(v[0], def.decimals ?? 1) : html`<span class="muted small">${t(lang, 'dataNoData')}</span>`}</div>
+          <button title=${t(lang, 'dataPaint')} aria-pressed=${indicator === key && m.view === 'data'} @click=${() => on('paint', key)}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+          </button>
+        </div>
+        ${me != null ? html`<div class="strip" title=${hp != null ? `${world.byIso.get(m.home)?.name?.[lang] || m.home}: ${nf(homeV, def.decimals ?? 1)}` : ''}>
+          ${hp != null ? html`<i class="home" style=${`left:${hp.toFixed(1)}%`}></i>` : nothing}
+          <i class="me" style=${`left:${me.toFixed(1)}%`}></i>
+          <span class="lo">${nf(all[0], def.decimals ?? 1)}</span><span class="hi">${nf(all.at(-1), def.decimals ?? 1)}</span>
+        </div>` : nothing}
+      </div>`;
+    })}
     <p class="small muted">${t(lang, 'dataSource')} · CC BY 4.0${world.indicatorsBuilt ? ` · ${world.indicatorsBuilt}` : ''}</p>`;
 }

@@ -174,6 +174,23 @@ export async function rates() {
   return { date: data.date, usd: { USD: 1, ...data.rates } };
 }
 
+// Twelve months of a currency against USD and MXN (Frankfurter, daily, free).
+export async function rateHistory(code) {
+  if (!code || code === 'USD') return null;
+  const end = new Date();
+  const start = new Date(end.getTime() - 365 * 86400000);
+  const d = (x) => x.toISOString().slice(0, 10);
+  const symbols = code === 'MXN' ? 'MXN' : `${code},MXN`;
+  const data = await getJson(`https://api.frankfurter.dev/v1/${d(start)}..${d(end)}?base=USD&symbols=${symbols}`, { ttlMs: 6 * 3600e3 });
+  if (!data?.rates) return null;
+  const days = Object.keys(data.rates).sort();
+  return {
+    days,
+    perUsd: days.map((k) => data.rates[k][code] ?? null),
+    mxnPerUsd: days.map((k) => data.rates[k].MXN ?? null),
+  };
+}
+
 // ---------- Holidays (Nager.Date) ----------
 
 export async function holidaysToday(iso2) {

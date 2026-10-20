@@ -324,6 +324,43 @@ a.chip { text-decoration: none; }
 .hear[aria-current="true"] .play { background: var(--coral); }
 .hero-tools .anthem { width: auto; border-radius: 999px; padding: 0 12px 0 8px; gap: 6px; font-size: 0.82rem; font-weight: 700; }
 
+/* Money extras: converter and 12-month line */
+.convert { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 0.95rem; }
+.convert input { width: 92px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font: inherit; background: #fff; color: var(--ink); text-align: right; }
+.convert b { font-family: var(--display); font-size: 1.15rem; font-weight: 600; }
+.convert .muted { font-size: 0.82rem; }
+.rateline { width: 100%; height: 64px; display: block; margin: 6px 0 0; }
+.rateline path.line { fill: none; stroke: var(--coral); stroke-width: 1.8; }
+.rateline path.fill { fill: rgba(228, 96, 58, 0.12); }
+.rateline text { font-size: 10px; fill: var(--muted); font-family: var(--body); }
+
+/* Indicators: position strips with two dots */
+.strip { position: relative; height: 14px; margin: 6px 0 18px; }
+.strip::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: var(--paper-3); border-radius: 2px; }
+.strip i { position: absolute; top: 2px; width: 10px; height: 10px; border-radius: 50%; transform: translateX(-50%); }
+.strip i.me { background: var(--coral); box-shadow: 0 0 0 2px #fff; z-index: 1; }
+.strip i.home { background: transparent; border: 2px solid var(--ink-2); width: 8px; height: 8px; top: 3px; }
+.strip .lo, .strip .hi { position: absolute; top: 14px; font-size: 0.7rem; color: var(--muted); }
+.strip .hi { right: 0; }
+.ind.strips { display: block; }
+.ind.strips .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ind .legend-dots { font-size: 0.72rem; color: var(--muted); display: flex; gap: 10px; margin: 2px 0 8px; }
+.ind .legend-dots i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+/* Sun clock */
+.sunclock { width: 44px; height: 44px; flex: none; }
+.sunclock .night { fill: #1b1f2a; }
+.sunclock .day { fill: #f6d78a; }
+.sunclock .hand { stroke: var(--coral); stroke-width: 2.4; stroke-linecap: round; }
+.sunclock .hand.home { stroke: var(--ink-2); stroke-width: 1.6; stroke-dasharray: 2 2; }
+.sunclock circle.rim { fill: none; stroke: rgba(0, 0, 0, 0.18); }
+
+/* People as dots */
+.dots-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; margin: 6px 0; }
+.dots-grid i { aspect-ratio: 1; border-radius: 50%; background: var(--ink-2); display: block; }
+.dots-grid i.b { background: #7fb2d9; }
+.dots-note { font-size: 0.78rem; color: var(--muted); margin: 0 0 8px; }
+
 /* Ask: context prompt to Google AI Mode */
 .hero-tools .ask { width: auto; border-radius: 999px; padding: 0 12px 0 10px; gap: 6px; font-size: 0.82rem; font-weight: 700; }
 .askbox { margin: 12px 0 4px; padding: 12px; background: rgba(255, 255, 255, 0.6); border: 1px solid var(--line); border-radius: 14px; }
