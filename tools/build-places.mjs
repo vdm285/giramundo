@@ -241,9 +241,9 @@ SELECT ?c ?demo ?gender ?number WHERE {
 
 const TEX_MEX = 'Q29359';
 const OVERRIDES = join(root, 'data/overrides/dishes.json');
-let overrides = {};
+let overrides = {}; // keys starting with "_" are comments
 try {
-  overrides = JSON.parse(await readFile(OVERRIDES, 'utf8'));
+  overrides = Object.fromEntries(Object.entries(JSON.parse(await readFile(OVERRIDES, 'utf8'))).filter(([k]) => !k.startsWith('_')));
 } catch (err) {
   if (err.code !== 'ENOENT') throw new Error(`${OVERRIDES}: ${err.message}`);
 }

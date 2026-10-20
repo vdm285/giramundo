@@ -103,7 +103,9 @@ Per country it collects:
 
 - **UNESCO World Heritage sites**: items with a UNESCO id (P757, without a `-`, which excludes the component parts of serial sites) and a live heritage-designation statement (P1435 = Q9259, not deprecated, no end date, so delisted sites drop out) whose country (P17) is this one. Transboundary sites appear under every country they lie in and carry `shared: n`; they sort after the local sites because they have one coordinate. Label es/en, description es/en, coordinates (P625), one Commons image (P18), the inscription year (the designation's start time, P580) and the es/en Wikipedia article URLs. Capped at 25 per country: sites with a photo and coordinates first, then the ones more Wikipedias write about (sitelinks). Capped today: BR CN DE ES FR GB IN IR IT JP MX RU US.
 - **National cuisine**: the item that is an instance of "national cuisine" (Q1968435) with P17 = the country, with its es/en Wikipedia URLs.
-- **Dishes**: Wikidata has no "national dish" property and the "national dish" class (Q1391582) is applied to seven items worldwide, so the list is the items filed under the national cuisine (P2012) that have a photo, ranked by sitelinks, 8 per country. A dish whose recorded country of origin (P495) is elsewhere is dropped; one whose origin is this country ranks above one with no origin recorded; restaurants, chains, brands, people and books filed under a cuisine are excluded by type. Items tagged as national dishes carry `national: true` and sort first. This is "what Wikidata files under Mexican cuisine", not a verdict: the card should say so (`notes` in the file).
+- **Dishes**: Wikidata has no "national dish" property and the "national dish" class (Q1391582) is applied to seven items worldwide, so the list is the items filed under the national cuisine (P2012) that have a photo, ranked by sitelinks, 8 per country. A dish whose recorded country of origin (P495) is elsewhere is dropped; one whose origin is this country ranks above one with no origin recorded; restaurants, chains, brands, people and books filed under a cuisine are excluded by type. Items tagged as national dishes carry `national: true` and sort first. Each dish carries its es/en Wikipedia URLs in `wiki` when they exist. This is "what Wikidata files under Mexican cuisine", not a verdict: the card should say so (`notes` in the file).
+  Two generic filters (added 2026-10-20) apply to every country: (1) a dish filed under **Tex-Mex cuisine** (P2012 = Q29359) is dropped even when it is also filed under the country's own cuisine, because Wikidata files chili con carne under Mexican, US and Tex-Mex cuisine at once, with origin Mexico; (2) a dish with **no country of origin** is kept only when its cuisine statement names this country's cuisine item (the "national dish" branch reaches items through P17 and is exempt). The filters are generic on purpose; a dish they drop wrongly (guacamole is also filed under Tex-Mex) is rescued per country through the overrides file below, which bypasses them. The console prints how many dishes each filter removed and the top ten countries.
+- **Curated dishes** (`data/overrides/dishes.json`, committed, added 2026-10-20): per country, Wikidata items a person vouched for. They are fetched in one query (label es/en/mul, photo P18, es/en Wikipedia) and placed first, in the file's order, each with `curated: true` and an optional `region: { es, en }` (the state or area it belongs to, for the card to show on hover); the generic list fills the remaining slots up to 8, so a country with 8 or more curated dishes shows only those. Excluded items are dropped wherever they came from. See "How to curate a country" below.
 - **Anthem** (P85): the statement that is a national anthem (Q23691) and preferred when several exist (Mexico also lists its flag salute), skipping ended statements.
 - **Demonym** (P1549): Spanish masculine singular when marked (P5185 = Q499327), English singular when marked (P11054 = Q110786); plural-marked forms are skipped when anything else exists; unmarked Spanish pairs break the tie away from `-a`.
 
@@ -135,7 +137,12 @@ On demand. The output is **committed** (`public/data/places.json`, about 600 KB)
       "localLang": "es",
       "cuisine": { "qid": "Q207965", "label": { "es": "gastronomía de México", "en": "Mexican cuisine", "local": "gastronomía de México" },
                    "wiki": { "es": "https://es.wikipedia.org/wiki/…", "en": "https://en.wikipedia.org/wiki/Mexican_cuisine" } },
-      "dishes": [ { "qid": "Q191655", "label": { "es": "taco", "en": "taco", "local": "taco" }, "localLang": "es", "image": "001 Tacos de carnitas, carne asada y al pastor.jpg" } ],
+      "dishes": [
+        { "qid": "Q4804467", "label": { "es": "Cochinita pibil", "en": "Cochinita pibil", "local": "Cochinita pibil" }, "localLang": "es",
+          "image": "Cochinita pibil 2.jpg", "wiki": { "es": "https://es.wikipedia.org/wiki/Cochinita_pibil", "en": "https://en.wikipedia.org/wiki/Cochinita_pibil" },
+          "region": { "es": "Yucatán", "en": "Yucatán" }, "curated": true },
+        { "qid": "Q191655", "label": { "es": "taco", "en": "taco", "local": "taco" }, "localLang": "es", "image": "001 Tacos de carnitas, carne asada y al pastor.jpg", "wiki": { "es": "…", "en": "…" } }
+      ],
       "heritage": [
         { "qid": "Q5859", "whs": "483",
           "label": { "es": "Chichén Itzá", "en": "Chichen Itza", "local": "Chichén Itzá" },
@@ -150,18 +157,43 @@ On demand. The output is **committed** (`public/data/places.json`, about 600 KB)
 }
 ```
 
-`demonym`, `anthem`, `cuisine`, `desc` are `null` when Wikidata has nothing; `ll`, `image`, `year` are `null` per site when missing; `wiki` has only the languages that have an article (sometimes `{}`); `shared: n` appears only on transboundary sites; `national: true` only on dishes tagged as such; `whs` is the UNESCO id as Wikidata stores it (`"1061bis"`, `"1321rev"` are official suffixes).
+`demonym`, `anthem`, `cuisine`, `desc` are `null` when Wikidata has nothing; `ll`, `image`, `year` are `null` per site when missing; `wiki` has only the languages that have an article (sometimes `{}`); `shared: n` appears only on transboundary sites; `national: true` only on dishes tagged as such; `curated: true` and `region` only on dishes that come from `data/overrides/dishes.json`; `whs` is the UNESCO id as Wikidata stores it (`"1061bis"`, `"1321rev"` are official suffixes).
 
 `image` is a Wikimedia Commons **file name**, not a URL. The site builds thumbnails itself: `https://commons.wikimedia.org/wiki/Special:FilePath/<encodeURIComponent(image)>?width=640`, and links the file page `https://commons.wikimedia.org/wiki/File:<image>` for the credit.
 
-Counts on 2026-10-16: 174 countries with at least one site, 1,172 site entries (1,134 with image, 1,157 with coordinates, 111 transboundary repeats); 194 countries with a cuisine item, 112 with dishes (519 dishes); 237 anthems (missing: PT, whose Wikidata item has no P85, EH, and small territories); 235 demonyms. Local labels on 2026-10-20: 64 languages (AQ has none), 465 of 519 dishes have `label.local` and 280 of those differ from both es and en; 182 of 194 cuisines and 1,067 of 1,172 sites have one. The file is 671 KB (cap: keep it under 2 MB).
+Counts on 2026-10-16: 174 countries with at least one site, 1,172 site entries (1,134 with image, 1,157 with coordinates, 111 transboundary repeats); 194 countries with a cuisine item, 112 with dishes (519 dishes); 237 anthems (missing: PT, whose Wikidata item has no P85, EH, and small territories); 235 demonyms. Local labels on 2026-10-20: 64 languages (AQ has none), 465 of 519 dishes have `label.local` and 280 of those differ from both es and en; 182 of 194 cuisines and 1,067 of 1,172 sites have one. The file is 671 KB (cap: keep it under 2 MB). After the Tex-Mex filter and the Mexico curation (2026-10-20): 528 dishes in 112 countries (MX has 18 curated, no generic fill; the Tex-Mex filter removed 2 dishes in MX and 1 in US), 484 dishes have a `wiki` link, 719 KB.
 
 ### Attribution rules
 
 - Wikidata is CC0: no credit is legally required, but the card should say "Datos: Wikidata" and link the item (`https://www.wikidata.org/wiki/<qid>`) so a wrong fact can be fixed at the source.
 - Commons images are **not** CC0. Each file has its own license (CC BY, CC BY-SA, public domain…). When the card shows an image it must link to the file page, and ideally show the author and license fetched live from `https://commons.wikimedia.org/w/api.php?action=query&titles=File:<image>&prop=imageinfo&iiprop=extmetadata&format=json&origin=*` (fields `Artist`, `LicenseShortName`, `LicenseUrl`). Never crop out a watermark or present the photo as ours.
 - `desc` and `wiki` are Wikipedia: CC BY-SA 4.0; keep the link.
-- Dishes are a Wikidata filing, not an editorial ranking. The card says where the list comes from and does not call anything "the national dish" unless `national: true`.
+- Dishes are a Wikidata filing, not an editorial ranking. The card says where the list comes from and does not call anything "the national dish" unless `national: true`. Curated dishes are still Wikidata items: the person picked which ones, not what they are.
+
+### How to curate a country
+
+Wikidata's filing is thin for most kitchens: the regional dishes a local would name usually carry "country of origin" but no "cuisine" statement, so they never reach the generic list, while border or export food does. The fix is a short list per country in **`data/overrides/dishes.json`** (committed; `data/cache/` is not):
+
+```json
+{
+  "MX": {
+    "note": "why this country needed a hand, and any call you made against the data",
+    "include": [
+      { "qid": "Q4804467", "region": { "es": "Yucatán", "en": "Yucatán" } },
+      "Q515692"
+    ],
+    "exclude": ["Q863794", "Q2666603"]
+  }
+}
+```
+
+- `include`: Wikidata Q-ids, in the order the card should show them (the card shows the first six). An entry is a plain `"Q…"` or an object with `qid` and `region`, short es/en strings naming the state or area (`"Todo el país"` / `"Nationwide"` when it has none). The build fetches label, photo and Wikipedia links from Wikidata; the file never carries a name, a photo or a description.
+- `exclude`: Q-ids that must not appear, whatever Wikidata files them under.
+- `note`: free text for the next person. Keys starting with `_` are comments.
+- The rule: **an override must be a real Wikidata item with a photo (P18)**. An id that does not resolve, or has no photo, is skipped with a console warning, never written. No invented dishes: if the dish has no Wikidata item yet, create the item there (with a Commons photo) first, then point at it.
+- To find ids: search the dish on wikidata.org in es and en, open the item, check P18 (image), P495 (country of origin) and P2012 (cuisine). Prefer the specific item over the generic one ("Mole poblano" Q3319470 over "mole"; "Huachinango a la veracruzana" Q17073167 over "fish"). Record in `note` when you went against the data (Mexico excludes nachos although Wikidata says they were born in Piedras Negras).
+
+Then `npm run places` (the curated query and the changed batches run live, about 1.5 s apart; everything else is cached), read the `curated:` and `dish filters:` lines in the console summary, open `public/data/places.json` at the country, and commit both files.
 
 ### Run locally
 
@@ -170,7 +202,7 @@ npm run places                 # about 25 SPARQL queries, under 3 minutes from a
 rm -r data/cache/wikidata      # to force fresh data (the cache is keyed by query text)
 ```
 
-Check the console summary (countries with heritage, sites, images), then open `public/data/places.json` and look at `MX` and `JP`. Commit the file.
+Check the console summary (countries with heritage, sites, images, curated dishes, dish filters), then open `public/data/places.json` and look at `MX` and `JP`. Commit the file (and `data/overrides/dishes.json` if it changed).
 
 ## Videos
 

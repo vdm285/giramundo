@@ -243,7 +243,7 @@ function dishList(dishes, lang) {
       <div class="place ${d.image ? '' : 'noimg'}" style="cursor:default">
         <a class="yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`} target="_blank" rel="noreferrer" title=${t(lang, 'ytVideo')}>▶ YouTube</a>
         ${d.image ? html`<img loading="lazy" src=${commonsThumb(d.image, 480)} alt="">` : nothing}
-        <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}${local ? html`<small>${local}</small>` : nothing}</a>
+        <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}${local ? html`<small>${local}</small>` : nothing}${d.region?.[lang] || d.region?.es ? html`<small>${d.region?.[lang] || d.region?.es}</small>` : nothing}</a>
       </div>`;
     })}</div>
     <p class="small muted">Wikidata · Wikimedia Commons</p>`;
