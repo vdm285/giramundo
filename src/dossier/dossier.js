@@ -6,6 +6,7 @@ import { SECTIONS } from '../app/router.js';
 import { t } from '../app/i18n.js';
 import { continentLabel, currencyLabel, displayCapital, formatCompact, formatCount, formatTime, languageNames, mainZone } from '../data/format.js';
 import { commonsPage, commonsThumb } from '../live/sources.js';
+import { aiModeUrl, buildPrompt } from '../live/ask.js';
 
 // Real banknotes and coins from Wikimedia Commons, as a slideshow sized like
 // a bill. Hover shows the denomination, the currency and the rate.
@@ -107,6 +108,9 @@ export function renderDossier(m) {
             ? html`<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>`
             : html`<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`}
           ${t(lang, 'anthem')}</button>` : nothing}
+        <button class="ask" aria-pressed=${Boolean(m.ask)} title=${t(lang, 'askTitle')} @click=${() => on('ask')}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+          ${t(lang, 'ask')}</button>
         <button title=${t(lang, m.wide ? 'shrink' : 'expand')} aria-label=${t(lang, m.wide ? 'shrink' : 'expand')} aria-pressed=${Boolean(m.wide)} @click=${() => on('wide')}>
           ${m.wide
             ? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 20v-5h5M4 15h5v5M20 9h-5V4"/></svg>`
@@ -126,6 +130,17 @@ export function renderDossier(m) {
       ${SECTIONS.map((s) => html`<button role="tab" aria-selected=${s === section} @click=${() => on('section', s)}>${t(lang, `sec_${s}`)}</button>`)}
     </nav>
     <div class="body">
+      ${m.ask ? html`
+        <div class="askbox">
+          <h3>${t(lang, 'askTitle')}</h3>
+          <p class="small muted" style="margin-bottom:8px">${t(lang, 'askHint')}</p>
+          <textarea .value=${m.ask.text} maxlength="1800" @input=${(e) => on('ask-edit', e.target.value)}></textarea>
+          <div class="acts">
+            <a class="btn solid" href=${aiModeUrl(m.ask.text)} target="_blank" rel="noreferrer noopener">${t(lang, 'askOpen')} ↗</a>
+            <button class="btn" @click=${() => on('ask-edit', buildPrompt(m))}>${t(lang, 'askReset')}</button>
+            <span class="count">${m.ask.text.length}/1800</span>
+          </div>
+        </div>` : nothing}
       ${m.compare ? renderCompare(m) : nothing}
       ${!country.onMap && country.iso2 ? html`<div class="note"><p>${t(lang, 'small')}</p></div>` : nothing}
       ${dispute ? html`<aside class="note"><strong>${t(lang, 'disputed')}</strong><p>${dispute}</p></aside>` : nothing}

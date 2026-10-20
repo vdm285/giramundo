@@ -65,7 +65,7 @@ Status on 2026-10-16: phases 1 to 4 shipped in their first versions (see `HANDOF
 ## Parked ideas (not forgotten)
 
 - Kid mode as a layer: larger type, shorter extracts, gentle news filter, Vikidia links.
-- Historical context behind headlines: link today's news to the history section and to past events. First step (now): Wikipedia "in the news" and "most read" items that mention the country, plus background articles. Later: an optional AI layer where the reader pastes their own key (Claude, OpenAI, or a local model), stored only in their browser, that summarizes with context and answers follow-up questions about the country, comparisons included. Nothing runs by default.
+- Historical context behind headlines: link today's news to the history section and to past events. First step (now): Wikipedia "in the news" and "most read" items that mention the country, plus background articles. Done 2026-10-20 as a zero-cost bridge: the Preguntar button assembles a prompt from the screen and opens Google AI Mode in the reader's browser. Later: an optional AI layer where the reader pastes their own key (Claude, OpenAI, or a local model), stored only in their browser, that summarizes with context and answers follow-up questions about the country, comparisons included. Nothing runs by default.
 - Live radio: AI subtitles or live translation of what is playing, as an optional layer, much later.
 - Flights overhead (OpenSky snapshot).
 - Cities as a second level of tap.

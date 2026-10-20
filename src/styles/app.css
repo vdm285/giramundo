@@ -324,6 +324,19 @@ a.chip { text-decoration: none; }
 .hear[aria-current="true"] .play { background: var(--coral); }
 .hero-tools .anthem { width: auto; border-radius: 999px; padding: 0 12px 0 8px; gap: 6px; font-size: 0.82rem; font-weight: 700; }
 
+/* Ask: context prompt to Google AI Mode */
+.hero-tools .ask { width: auto; border-radius: 999px; padding: 0 12px 0 10px; gap: 6px; font-size: 0.82rem; font-weight: 700; }
+.askbox { margin: 12px 0 4px; padding: 12px; background: rgba(255, 255, 255, 0.6); border: 1px solid var(--line); border-radius: 14px; }
+.askbox h3 { font-family: var(--display); font-size: 1rem; margin: 0 0 6px; }
+.askbox textarea {
+  width: 100%; min-height: 120px; resize: vertical; font: inherit; font-size: 0.95rem; line-height: 1.4;
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; color: var(--ink);
+}
+.askbox .acts { margin-top: 8px; }
+.askbox .acts .btn { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.7); color: var(--ink); border-radius: 999px; min-height: 38px; padding: 0 14px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.askbox .acts .btn.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.askbox .count { margin-left: auto; color: var(--muted); font-size: 0.8rem; align-self: center; }
+
 /* Culture */
 .people { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .person { text-decoration: none; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }

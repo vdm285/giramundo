@@ -15,6 +15,7 @@ import { createFlatMap } from '../flat/map.js';
 import { renderDossier } from '../dossier/dossier.js';
 import * as live from '../live/sources.js';
 import { createRadio, shortName } from '../live/radio.js';
+import { buildPrompt } from '../live/ask.js';
 import { renderGame, renderPlayMenu, renderTourBar } from '../dossier/play.js';
 import { renderCity } from '../dossier/city.js';
 import { createPlay } from './play.js';
@@ -268,7 +269,7 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   const s = store.get();
   const feature = featureOf(country);
   if (s.compare && s.compare !== id && id !== s.id) play?.clearCompare();
-  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false, city: null });
+  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0 });
   writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
@@ -515,6 +516,14 @@ async function on(action, payload) {
       writeSetting('wide', !s.wide);
       break;
     case 'facts': store.set({ factsOpen: !s.factsOpen }); break;
+    case 'ask': {
+      if (s.ask) { store.set({ ask: null }); break; }
+      const c = countryOf(s.id);
+      store.set({ ask: { text: buildPrompt({ lang: s.lang, country: c, section: s.section, content: s.content, places: c?.iso2 ? world.places?.[c.iso2] : null, culture: c?.iso2 ? world.culture?.[c.iso2] : null, city: s.city, compareCountry: s.compare ? world.byIso.get(s.compare) : null }) } });
+      requestAnimationFrame(() => document.querySelector('.askbox textarea')?.focus());
+      break;
+    }
+    case 'ask-edit': store.set({ ask: { text: String(payload).slice(0, 1800) } }); break;
     case 'read': store.set({ readOpen: { ...s.readOpen, [payload]: !s.readOpen?.[payload] } }); break;
     case 'money-step': {
       const code = countryOf(s.id)?.currencies?.[0]?.code;
@@ -672,7 +681,7 @@ function shell(s) {
           ? renderGame({ lang: s.lang, game: s.game, world, on, base })
           : s.city
             ? renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base, radio: s.radio, cityStation: nearestStation(country?.iso2, s.city.ll) })
-            : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, money: world.money, on, base, feature: featureOf(country), stationFor: (l) => stationForLanguage(country?.iso2, l) })}
+            : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, money: world.money, compareCountry: s.compare ? world.byIso.get(s.compare) : null, on, base, feature: featureOf(country), stationFor: (l) => stationForLanguage(country?.iso2, l) })}
       </div>
     </aside>
     <dialog id="about">
@@ -838,6 +847,7 @@ export async function boot({ wire = false } = {}) {
     factsOpen: false,
     readOpen: {},
     moneyIdx: 0,
+    ask: null,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
