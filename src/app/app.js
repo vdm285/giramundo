@@ -24,6 +24,7 @@ import { createRadio, shortName } from '../live/radio.js';
 import { buildPrompt } from '../live/ask.js';
 import { renderGame, renderPlayMenu, renderTourBar } from '../dossier/play.js';
 import { renderCity } from '../dossier/city.js';
+import { createMiniGlobe } from '../ui/miniglobe.js';
 import { createPlay } from './play.js';
 import { createStore, readSetting, writeSetting } from './state.js';
 
@@ -216,6 +217,101 @@ function nearestStation(iso2, ll) {
   return best;
 }
 
+// ---------- focus mode: a country fills the flat stage, states one tap down ----------
+
+let adminIndex;
+let prevFlatBeforeFocus = null;
+let mini = null;
+
+async function loadAdminIndex() {
+  if (adminIndex !== undefined) return adminIndex;
+  adminIndex = await fetch(`${base}data/admin/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return adminIndex;
+}
+
+function coveredRight() {
+  const s = store.get();
+  const dossier = document.querySelector('.dossier');
+  return dossier && !s.collapsed && window.innerWidth >= 920 ? dossier.getBoundingClientRect().width + 20 : 0;
+}
+
+async function enterFocus(country) {
+  const s = store.get();
+  if (!s.focusMode || !country?.onMap) return false;
+  if (!s.flat) {
+    prevFlatBeforeFocus = false;
+    store.set({ flat: true });
+    await mountSurface(true);
+  }
+  const feature = featureOf(country);
+  store.set({ focus: true, admin: null, adminLevel: 0, state: null });
+  surface?.setAdmin?.(null);
+  if (feature) surface?.fitBounds?.(feature, { coveredRight: coveredRight() });
+  // States, when the boundaries exist for this country.
+  const index = await loadAdminIndex();
+  const entry = index?.countries?.[country.iso2];
+  if (!entry?.levels?.adm1?.file || store.get().id !== country.iso2) return true;
+  const adm1 = await fetch(`${base}data/admin/${entry.levels.adm1.file}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (adm1 && store.get().id === country.iso2) {
+    store.set({ admin: adm1, adminLevel: 1 });
+    surface?.setAdmin?.(adm1);
+  }
+  return true;
+}
+
+function exitFocus() {
+  const s = store.get();
+  surface?.setAdmin?.(null);
+  store.set({ focus: false, admin: null, adminLevel: 0, state: null, collapsed: true });
+  if (prevFlatBeforeFocus === false && s.flat) {
+    store.set({ flat: false });
+    mountSurface(false);
+  }
+  prevFlatBeforeFocus = null;
+}
+
+async function openState(feature) {
+  const s = store.get();
+  const country = countryOf(s.id);
+  if (!feature || !country) return;
+  store.set({ state: feature, collapsed: false });
+  surface?.setAdminSelected?.(feature.properties.id);
+  surface?.fitBounds?.(feature, { coveredRight: coveredRight() });
+  const index = await loadAdminIndex();
+  const level = index?.countries?.[country.iso2]?.levels?.adm2;
+  if (!level) return;
+  // Municipalities: one file per state when the level is split, else one file filtered by parent.
+  const file = level.split ? `${level.dir || ''}${feature.properties.id}.json` : level.file;
+  const adm2 = await fetch(`${base}data/admin/${file}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (!adm2 || store.get().state?.properties?.id !== feature.properties.id) return;
+  const subset = level.split ? adm2 : { ...adm2, features: adm2.features.filter((f) => f.properties.parent === feature.properties.id) };
+  store.set({ admin: subset, adminLevel: 2 });
+  surface?.setAdmin?.(subset);
+}
+
+async function backToCountry() {
+  const s = store.get();
+  const country = countryOf(s.id);
+  store.set({ state: null });
+  if (country) await enterFocus(country);
+}
+
+function mountMini() {
+  const canvas = document.getElementById('mini');
+  if (!canvas) { mini?.dispose(); mini = null; return; }
+  if (mini && mini.canvas === canvas) return;
+  mini?.dispose();
+  mini = createMiniGlobe(canvas, world, {
+    onPick(hit, how) {
+      if (how === 'tap') { exitFocus(); return; }
+      if (hit && (hit.iso2 || hit.placeId) !== store.get().id) select(hit.iso2 || hit.placeId);
+    },
+  });
+  mini.canvas = canvas;
+  const country = countryOf(store.get().id);
+  mini.setSelected(featureOf(country));
+}
+
 // ---------- cities ----------
 
 let cityToken = 0;
@@ -283,7 +379,11 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   // The idle spin would carry the country you are reading about off-screen.
   surface?.setSpin(false);
   surface?.setBeacon(country.ll?.[0], country.ll?.[1]);
-  if (fly && country.ll && surface) flyToCountry(country, turns);
+  if (fly && country.ll && surface) {
+    // Focus mode takes over the stage; otherwise the classic fly.
+    enterFocus(country).then((took) => { if (!took) flyToCountry(country, turns); });
+  }
+  mini?.setSelected(feature);
   syncMarkers();
   loadContent(country);
   requestAnimationFrame(() => { const el = document.querySelector('.dossier-scroll'); if (el) el.scrollTop = 0; });
@@ -410,6 +510,12 @@ function onTap(event) {
   }
   const marker = surface.markerAt(event.clientX, event.clientY);
   if (marker?.kind === 'city') { openCity(marker.city); return; }
+  // In focus mode a tap inside the country goes one level down (state);
+  // a tap on a neighbor at the edge switches country as usual.
+  if (s.focus && s.adminLevel === 1 && surface.adminAt) {
+    const unit = surface.adminAt(event.clientX, event.clientY);
+    if (unit) { openState(unit); return; }
+  }
   if (marker?.kind === 'place') {
     store.set({ place: marker.place, section: 'lugares', collapsed: false });
     syncMarkers();
@@ -433,6 +539,11 @@ function onMove(event) {
   let feature = null;
   if (marker?.kind === 'place') label = marker.place.label?.[s.lang] || marker.place.label?.en || '';
   else if (marker?.kind === 'city') label = marker.city.name?.[s.lang] || marker.city.name?.en || '';
+  else if (s.focus && s.admin && surface.adminAt) {
+    const unit = surface.adminAt(event.clientX, event.clientY);
+    surface.setAdminHover?.(unit?.properties?.id || null);
+    if (unit) label = unit.properties.name || '';
+  }
   else if (marker?.kind === 'country') label = countryOf(marker.id)?.name?.[s.lang] || '';
   else {
     const ll = surface.pickLatLon(event.clientX, event.clientY);
@@ -653,6 +764,16 @@ function shell(s) {
       </div>
     </header>
     ${s.collapsed && country ? html`<button class="reopen" @click=${() => on('collapse')} aria-label=${t(s.lang, 'expand')}>${country.flag ? html`<img alt="" src=${base + country.flag}>` : nothing}${country.name[s.lang] || country.name.en}</button>` : nothing}
+    ${s.focus && country ? html`
+      <div class="crumb" aria-label="Nivel">
+        <button @click=${() => exitFocus()}>${t(s.lang, 'worldLevel')}</button><span class="sep">›</span>
+        ${s.state ? html`<button @click=${() => backToCountry()}>${country.name[s.lang] || country.name.en}</button><span class="sep">›</span><span>${s.state.properties.name}</span>` : html`<span>${country.name[s.lang] || country.name.en}</span>`}
+        ${s.admin?.features?.length ? html`<span class="n">${s.admin.features.length} ${t(s.lang, s.adminLevel === 2 ? 'municipalities' : 'states')}</span>` : nothing}
+      </div>
+      <div class="miniglobe">
+        <canvas id="mini" width="150" height="150" aria-label=${t(s.lang, 'miniHint')} title=${t(s.lang, 'miniHint')}></canvas>
+        <div class="hint">${t(s.lang, 'miniHint')}</div>
+      </div>` : nothing}
     ${s.playmenu ? renderPlayMenu({ lang: s.lang, on, tours: play.tours(s.lang) }) : nothing}
     ${s.tour ? renderTourBar({ lang: s.lang, tour: s.tour, on, progress: play.tourProgress() }) : nothing}
     <dialog id="settings" class="settings">
@@ -893,6 +1014,13 @@ export async function boot({ wire = false } = {}) {
     ask: null,
     convertAmount: 100,
     searchOpen: false,
+    // Focus mode: a selected country fills the flat stage with its states;
+    // the corner globe is the way out.
+    focusMode: readSetting('focusMode', true),
+    focus: false,
+    admin: null,
+    adminLevel: 0,
+    state: null,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
@@ -922,6 +1050,7 @@ export async function boot({ wire = false } = {}) {
     document.body.classList.toggle('wide', Boolean(s.wide));
     document.body.classList.toggle('wire', WIRE);
     render(shell(s), ui);
+    mountMini();
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
     if (location.hash !== next) history.replaceState(null, '', next);
     const name = s.city ? (s.city.name?.[s.lang] || s.city.name?.en) : countryOf(s.id)?.name?.[s.lang];

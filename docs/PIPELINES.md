@@ -660,3 +660,79 @@ rm -r data/cache/commons                       # fresh search results (the refre
 ```
 
 On Windows PowerShell: `$env:MONEY_ONLY = "MXN,JPY"; npm run money`. Check the console summary, then open `public/data/money.json` and look at `USD`, `EUR`, `JPY`, `BRL` (should read as today's notes) and `MXN` (older issues, by Commons' limits, not ours). Commit the file.
+
+## Admin boundaries
+
+### What runs
+
+`npm run admin` → `node tools/build-admin.mjs --country=MX` (MX is the default; pass another ISO 3166-1 alpha-2 code to build another country). Source: [geoBoundaries](https://www.geoboundaries.org), the gbOpen release, through its API: `https://www.geoboundaries.org/api/current/gbOpen/<ISO3>/<ADM1|ADM2>/` (ISO3 comes from `facts.json`). The answer is JSON; the script reads `simplifiedGeometryGeoJSON` (falling back to `gjDownloadURL`) and the metadata (`boundarySource`, `boundaryLicense`, `boundaryYearRepresented`, `buildDate`). Both the API answers and the GeoJSON files are cached in `data/cache/admin/` (gitignored; Mexico: 4 MB for ADM1, 17 MB for ADM2). `ADMIN_FRESH=1 npm run admin` re-downloads (`$env:ADMIN_FRESH = "1"; npm run admin` on PowerShell).
+
+geoBoundaries republishes one official or UN/World Bank layer per country and level, and **each layer carries its own license**, returned by the API. For Mexico: ADM1 (32 states, 2020) is INEGI via HDX under **CC BY 3.0 IGO**; ADM2 (2,457 municipalities, 2012) is the World Bank's "Mexico municipalities 2012" under **CC BY 4.0**. geoBoundaries asks to be cited (Runfola et al. 2020, PLoS ONE 15(4): e0231866). The credit line for the UI is **"geoBoundaries, CC BY 4.0"**, linking `https://www.geoboundaries.org`; `index.json` keeps the per-layer license and the source URL so a longer credit can be shown on demand.
+
+### Simplification (and why it is for display only)
+
+The "simplified" files geoBoundaries serves are still far too big for a static site (Mexico ADM1 would be 1.5 MB at 3 decimals, ADM2 6.7 MB), so the script simplifies again, without dependencies:
+
+1. Coordinates are quantized to 3 decimals (about 100 m).
+2. Every vertex is classified: a point with three or more distinct neighbors across all rings is a **junction**; the others are interior arc points. Rings are cut into arcs at the junctions, and an arc shared by two neighbors is stored once (Mexico ADM1: 87,689 vertices become 66,595 points, 1,386 arcs, 246 junctions; ADM2: 364,465 vertices, 7,969 arcs, 5,071 junctions).
+3. Each arc is simplified once with **Visvalingam-Whyatt** (effective triangle area in km², endpoints pinned), so two states or two municipalities keep exactly the same border: 4,863 ADM1 edges are shared by two states and none is duplicated.
+4. The tolerance is found by bisection on the serialized size against a byte target (ADM1 290 KB; ADM2 1.15 MB for a single file, otherwise 150 KB or 400 bytes per municipality per state, whichever is more).
+5. Islands shrink to triangles before they vanish; rings smaller than three times the tolerance (and degenerate rings) are dropped unless they are the feature's biggest.
+
+The result is a **display layer**: fine for a country or state focus view, where the viewer sees a few hundred metres of error at most. It is not for measuring area or length, for counting what falls inside a boundary at the edge, or for any legal question; the geoBoundaries source files (and INEGI's Marco Geoestadístico) are. Mexico's ADM2 is the **2012** municipal map: the municipalities created since (several in Chiapas and Quintana Roo, among others) are not in it, and the dossier must not pretend otherwise.
+
+Exterior rings are rewound to d3-geo's convention (clockwise exterior, as d3 reads the sphere) before any `geoContains`, both when assigning parents and in the output, so the app can call `geoContains(feature.geometry, [lon, lat])` directly.
+
+### Output
+
+`public/data/admin/`, **committed**:
+
+```
+index.json            what exists: countries, levels, counts, bytes, tolerance, source, license, build date
+mx-adm1.json          FeatureCollection, 32 states, 289 KB
+mx/<adm1-id>.json     one FeatureCollection of municipalities per state (32 files, 3.6 MB in all, 16 KB to 228 KB each)
+```
+
+ADM1 properties: `{ "id": "mx-jal", "name": "Jalisco", "code": "MX-JAL" }`, plus `official` when the constitutional name is longer (`"Coahuila de Zaragoza"`, `"Michoacán de Ocampo"`, `"Veracruz de Ignacio de la Llave"`; `"México"` for `Estado de México`). `id` is `<iso2>-<ISO 3166-2 suffix in lowercase>`; `code` the ISO 3166-2 code. geoBoundaries' Mexico names are ASCII (`Yucatan`, `Nuevo Leon`) and it codes both "Distrito Federal" and "Mexico" as `MX-MEX`, so `tools/build-admin.mjs` carries a table of the 32 states with Spanish names and codes (`MX-CMX` for Ciudad de México); for another country, the source's `shapeName` and `shapeISO` are used as they stand, with a slug when there is no code.
+
+ADM2 properties: `{ "id": "mx-jal-guadalajara", "name": "Guadalajara", "parent": "mx-jal" }`. `parent` is found by **point-in-polygon of the municipality's spherical centroid against the ADM1 shapes** (d3-geo `geoContains`, after a bounding-box prefilter); when the centroid falls outside every state (a crescent, an archipelago) forty vertices vote instead. `id` is `<parent>-<slug of the name>`, with `-2`, `-3` for repeats inside a state. The source has no municipal codes (INEGI's `CVEGEO` is not in the layer), so there is no `code`. Names come with their accents from the source (`Jesús María`, `Mérida`).
+
+A single national ADM2 file would need a tolerance of 5.9 km² to fit 1.2 MB and would keep 12% of the vertices, so the script splits by state whenever a single file would keep less than 40%: the app loads `mx/<adm1-id>.json` when a state is in focus. The split files are filtered from the national topology, so municipalities across a state line still share their border.
+
+`index.json`:
+
+```json
+{
+  "built": "2026-10-20",
+  "source": "geoBoundaries (gbOpen), https://www.geoboundaries.org",
+  "credit": "geoBoundaries, CC BY 4.0",
+  "citation": "Runfola D, et al. (2020) ...",
+  "note": "Simplified for display ... Not for area, length or legal questions.",
+  "countries": {
+    "MX": {
+      "iso3": "MEX",
+      "levels": {
+        "adm1": { "file": "mx-adm1.json", "count": 32, "bytes": 289387, "toleranceKm2": 1.108,
+                  "year": "2020", "source": "Instituto Nacional de Estadística y Geografía (INEGI)",
+                  "license": "Creative Commons Attribution 3.0 Intergovernmental Organisations (CC BY 3.0 IGO)",
+                  "sourceUrl": "data.humdata.org/dataset/...", "api": "https://www.geoboundaries.org/api/current/gbOpen/MEX/ADM1/", "gbBuild": "Feb 21, 2024" },
+        "adm2": { "split": "adm1", "dir": "mx/", "count": 2457, "bytes": 3615496, "toleranceKm2": 2.695,
+                  "year": "2012", "source": "World Bank", "license": "Creative Commons Attribution 4.0 (CC BY 4.0)", "...": "...",
+                  "files": { "mx-jal": { "file": "mx/mx-jal.json", "count": 125, "bytes": 149000, "toleranceKm2": 0.675 }, "...": {} } }
+      }
+    }
+  }
+}
+```
+
+When a single ADM2 file fits, `adm2` has `file` instead of `split`/`dir`/`files`. Running the script for another country merges that country into `index.json` and leaves the others alone.
+
+### Checks (Mexico, 2026-10-20)
+
+- ADM1: 32 features, 32 distinct ISO codes, names `Aguascalientes … Zacatecas` with accents; no polygon larger than a hemisphere (winding).
+- ADM2: 2,457 features across 32 files, every one with a parent; per state: Oaxaca 569, Puebla 217, Veracruz 212, Jalisco 125, Estado de México 125, Chiapas 118, Michoacán 112, Yucatán 106, Hidalgo 84, Guerrero 83, Sonora 72, Chihuahua 67, Tlaxcala 60, San Luis Potosí 58, Zacatecas 58, Nuevo León 51, Guanajuato 46, Tamaulipas 43, Durango 39, Coahuila 38, Morelos 33, Nayarit 20, Querétaro 18, Sinaloa 18, Tabasco 17, Ciudad de México 16, Aguascalientes 11, Campeche 11, Colima 10, Quintana Roo 10, Baja California 5, Baja California Sur 5.
+- Point tests on the written files: Guadalajara (20.67, −103.35) → Jalisco / Guadalajara; Mérida (20.97, −89.62) → Yucatán / Mérida; the Zócalo → Ciudad de México / Cuauhtémoc; Monterrey → Nuevo León / Monterrey; Tijuana → Baja California / Tijuana.
+
+### Another country
+
+`npm run admin -- --country=JP`. The script needs the country in `facts.json` (for ISO3), fetches `ADM1` and `ADM2` (ADM2 is optional: a country without one gets only `<iso2>-adm1.json`), and uses geoBoundaries' names and `shapeISO` codes as they come. Look at the console: the license line per level (add it to the credit if it is not CC BY), the per-state counts, and any "without a parent" warning. Add a name table like `MX_STATES` only when the source's names are ASCII or its codes are wrong, as Mexico's were. Commit `public/data/admin/`.

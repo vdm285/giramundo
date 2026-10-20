@@ -20,7 +20,8 @@
     "cities": "node tools/build-cities.mjs",
     "culture": "node tools/build-culture.mjs",
     "maps": "node tools/build-maps.mjs",
-    "money": "node tools/build-money.mjs"
+    "money": "node tools/build-money.mjs",
+    "admin": "node tools/build-admin.mjs"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",

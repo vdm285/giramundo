@@ -5,7 +5,7 @@
 // Equirectangular was chosen because the NASA plates and the country index
 // already live in that layout, so this view costs no extra assets.
 
-import { geoEquirectangular, geoPath } from 'd3-geo';
+import { geoBounds, geoCentroid, geoContains, geoEquirectangular, geoPath } from 'd3-geo';
 import { subsolarPoint, wrapLon } from '../geo/math.js';
 
 const ACCENT = '#f2b24a';
@@ -37,6 +37,9 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
   let selected = null;
   let hover = null;
   let ghost = null;
+  let admin = null;
+  let adminHover = null;
+  let adminSelected = null;
   let markers = [];
   let beacon = null;
   let colorFor = null;
@@ -242,6 +245,39 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
       const x = x0 + off * worldW;
       ctx.save();
       ctx.translate(off * worldW, 0);
+      // Admin layer (states, then municipalities) in focus mode: light fills,
+      // ink strokes, the hovered or chosen unit lifted, names at centroids.
+      if (admin?.features?.length) {
+        const k2 = ppd();
+        for (const f of admin.features) {
+          const hot = f.properties.id === adminHover || f.properties.id === adminSelected;
+          ctx.fillStyle = hot ? 'rgba(242,178,74,0.55)' : 'rgba(255,255,255,0.22)';
+          ctx.beginPath(); path(f); ctx.fill();
+        }
+        ctx.strokeStyle = 'rgba(48,36,28,0.75)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        for (const f of admin.features) path(f);
+        ctx.stroke();
+        if (k2 > 9) {
+          ctx.font = `600 ${Math.min(14, 8 + k2 / 4)}px Outfit, system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          for (const f of admin.features) {
+            const c = f.properties.centroid || geoCentroid(f);
+            f.properties.centroid = c;
+            const [cx, cy] = projection(c);
+            const label = f.properties.name || '';
+            if (!label) continue;
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(247,242,232,0.85)';
+            ctx.strokeText(label, cx, cy);
+            ctx.fillStyle = '#1b1813';
+            ctx.fillText(label, cx, cy);
+          }
+        }
+      }
       // True-size overlay: the selected shape rotated onto the compared country.
       if (ghost) {
         ctx.save();
@@ -392,6 +428,33 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
     setHover(f) { if (hover !== f) { hover = f; dirty = true; } },
     setCompare() {},
     setGhost(f) { ghost = f || null; dirty = true; },
+    // Focus mode: fit a feature's bounds into the viewport, leaving `coveredRight`
+    // px for the dossier, so the country (or state) fills what the reader sees.
+    fitBounds(feature, { coveredRight = 0, pad = 0.12, duration = 900 } = {}) {
+      const [[lon0, lat0], [lon1, lat1]] = geoBounds(feature);
+      const dLon = Math.max(0.5, lon1 >= lon0 ? lon1 - lon0 : (lon1 + 360) - lon0);
+      const dLat = Math.max(0.5, lat1 - lat0);
+      const visibleW = Math.max(200, w - coveredRight);
+      const k = Math.min(visibleW / (dLon * (1 + pad * 2)), h / (dLat * (1 + pad * 2)));
+      const dist = clampDist(ppdToDist(k, h));
+      const cLon = wrapLon(lon0 + dLon / 2);
+      const cLat = (lat0 + lat1) / 2;
+      // Shift the center so the shape sits in the uncovered part of the screen.
+      const shiftLon = (coveredRight / 2) / k;
+      const toLon = view.lon + wrapLon(cLon + shiftLon - view.lon);
+      fly = { from: { lat: view.lat, lon: view.lon, dist: view.dist }, to: { lat: cLat, lon: toLon, dist }, t0: performance.now(), dur: duration };
+      zoomTarget = null;
+    },
+    setAdmin(collection) { admin = collection || null; adminHover = null; adminSelected = null; dirty = true; },
+    setAdminHover(id) { if (adminHover !== id) { adminHover = id; dirty = true; } },
+    setAdminSelected(id) { adminSelected = id; dirty = true; },
+    adminAt(clientX, clientY) {
+      if (!admin?.features?.length) return null;
+      const ll = pickLatLon(clientX, clientY);
+      if (!ll) return null;
+      for (const f of admin.features) if (geoContains(f, [ll.lon, ll.lat])) return f;
+      return null;
+    },
     setDataColors(fn) { colorFor = fn; colorVersion += 1; dirty = true; },
     setMarkers(list) { markers = list; dirty = true; },
     setBeacon(lat, lon) { beacon = lat == null ? null : { lat, lon }; dirty = true; },

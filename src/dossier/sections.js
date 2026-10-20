@@ -103,19 +103,20 @@ export function renderAhora(m) {
         : next ? html`<div class="cell"><span>${lang === 'es' ? 'Próximo feriado' : 'Next holiday'}</span><strong>${next.local}</strong><div class="small muted">${dateFmt.format(new Date(`${next.date}T12:00:00`))}</div></div>` : nothing}
     </div>
 
-    ${renderRadio(m)}
-
-    ${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang, country)}
-
-    ${shown.length ? html`
-      <h2>${t(lang, 'nowOnThisDay')}</h2>
-      <ol class="events">${shown.map((e) => html`<li><span>${e.year}</span>${e.url ? html`<a href=${e.url} target="_blank" rel="noreferrer">${e.text}</a>` : e.text}</li>`)}</ol>
-      <p class="small muted">Wikipedia · CC BY-SA</p>` : nothing}
-
-    ${content.quakes ? html`
-      <h2>${t(lang, 'nowQuakes')}</h2>
-      ${quakes.length ? html`<ul class="headlines quakes">${quakes.map((q) => html`<li><a href=${q.url} target="_blank" rel="noreferrer">${q.place}</a><b>M ${q.mag.toFixed(1)}</b></li>`)}</ul><p class="small muted">USGS</p>`
-        : html`<p class="small muted">${t(lang, 'nowQuakeNone')}</p>`}` : nothing}
+    <div class="now-cols">
+      <div>${renderRadio(m)}</div>
+      <div>${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang, country)}</div>
+      <div>
+        ${shown.length ? html`
+          <h2>${t(lang, 'nowOnThisDay')}</h2>
+          <ol class="events">${shown.map((e) => html`<li><span>${e.year}</span>${e.url ? html`<a href=${e.url} target="_blank" rel="noreferrer">${e.text}</a>` : e.text}</li>`)}</ol>
+          <p class="small muted">Wikipedia · CC BY-SA</p>` : nothing}
+        ${content.quakes ? html`
+          <h2>${t(lang, 'nowQuakes')}</h2>
+          ${quakes.length ? html`<ul class="headlines quakes">${quakes.map((q) => html`<li><a href=${q.url} target="_blank" rel="noreferrer">${q.place}</a><b>M ${q.mag.toFixed(1)}</b></li>`)}</ul><p class="small muted">USGS</p>`
+            : html`<p class="small muted">${t(lang, 'nowQuakeNone')}</p>`}` : nothing}
+      </div>
+    </div>
   `;
 }
 

@@ -1,0 +1,233 @@
+{
+  "built": "2026-10-20",
+  "source": "geoBoundaries (gbOpen), https://www.geoboundaries.org",
+  "credit": "geoBoundaries, CC BY 4.0",
+  "citation": "Runfola D, et al. (2020) geoBoundaries: A global database of political administrative boundaries. PLoS ONE 15(4): e0231866.",
+  "note": "Simplified for display (Visvalingam-Whyatt on shared arcs, coordinates at 3 decimals). Not for area, length or legal questions. Each level carries the license of its own source layer.",
+  "countries": {
+    "MX": {
+      "iso3": "MEX",
+      "levels": {
+        "adm1": {
+          "file": "mx-adm1.json",
+          "count": 32,
+          "bytes": 289387,
+          "toleranceKm2": 1.108,
+          "year": "2020",
+          "source": "Instituto Nacional de Estadística y Geografía (INEGI)",
+          "license": "Creative Commons Attribution 3.0 Intergovernmental Organisations (CC BY 3.0 IGO)",
+          "sourceUrl": "data.humdata.org/dataset/mexican-administrative-level-0-country-1-estado-and-2-municipio-boundary-polygons",
+          "api": "https://www.geoboundaries.org/api/current/gbOpen/MEX/ADM1/",
+          "gbBuild": "Feb 21, 2024"
+        },
+        "adm2": {
+          "split": "adm1",
+          "dir": "mx/",
+          "count": 2457,
+          "bytes": 3615496,
+          "toleranceKm2": 2.695,
+          "year": "2012",
+          "source": "World Bank",
+          "license": "Creative Commons Attribution 4.0 (CC BY 4.0)",
+          "sourceUrl": "datacatalog.worldbank.org/dataset/mexico-municipalities-2012",
+          "api": "https://www.geoboundaries.org/api/current/gbOpen/MEX/ADM2/",
+          "gbBuild": "Dec 12, 2023",
+          "files": {
+            "mx-agu": {
+              "file": "mx/mx-agu.json",
+              "count": 11,
+              "bytes": 33604,
+              "toleranceKm2": 0
+            },
+            "mx-bcn": {
+              "file": "mx/mx-bcn.json",
+              "count": 5,
+              "bytes": 54751,
+              "toleranceKm2": 0
+            },
+            "mx-bcs": {
+              "file": "mx/mx-bcs.json",
+              "count": 5,
+              "bytes": 72558,
+              "toleranceKm2": 0
+            },
+            "mx-cam": {
+              "file": "mx/mx-cam.json",
+              "count": 11,
+              "bytes": 40192,
+              "toleranceKm2": 0
+            },
+            "mx-chp": {
+              "file": "mx/mx-chp.json",
+              "count": 118,
+              "bytes": 149430,
+              "toleranceKm2": 0.377
+            },
+            "mx-chh": {
+              "file": "mx/mx-chh.json",
+              "count": 67,
+              "bytes": 149850,
+              "toleranceKm2": 0.495
+            },
+            "mx-coa": {
+              "file": "mx/mx-coa.json",
+              "count": 38,
+              "bytes": 92759,
+              "toleranceKm2": 0
+            },
+            "mx-col": {
+              "file": "mx/mx-col.json",
+              "count": 10,
+              "bytes": 41458,
+              "toleranceKm2": 0
+            },
+            "mx-cmx": {
+              "file": "mx/mx-cmx.json",
+              "count": 16,
+              "bytes": 15960,
+              "toleranceKm2": 0
+            },
+            "mx-dur": {
+              "file": "mx/mx-dur.json",
+              "count": 39,
+              "bytes": 149286,
+              "toleranceKm2": 0.073
+            },
+            "mx-gua": {
+              "file": "mx/mx-gua.json",
+              "count": 46,
+              "bytes": 149775,
+              "toleranceKm2": 0.028
+            },
+            "mx-gro": {
+              "file": "mx/mx-gro.json",
+              "count": 83,
+              "bytes": 149933,
+              "toleranceKm2": 0.236
+            },
+            "mx-hid": {
+              "file": "mx/mx-hid.json",
+              "count": 84,
+              "bytes": 147548,
+              "toleranceKm2": 0.096
+            },
+            "mx-jal": {
+              "file": "mx/mx-jal.json",
+              "count": 125,
+              "bytes": 148972,
+              "toleranceKm2": 0.675
+            },
+            "mx-mex": {
+              "file": "mx/mx-mex.json",
+              "count": 125,
+              "bytes": 149432,
+              "toleranceKm2": 0.118
+            },
+            "mx-mic": {
+              "file": "mx/mx-mic.json",
+              "count": 112,
+              "bytes": 149800,
+              "toleranceKm2": 0.309
+            },
+            "mx-mor": {
+              "file": "mx/mx-mor.json",
+              "count": 33,
+              "bytes": 60623,
+              "toleranceKm2": 0
+            },
+            "mx-nay": {
+              "file": "mx/mx-nay.json",
+              "count": 20,
+              "bytes": 103500,
+              "toleranceKm2": 0
+            },
+            "mx-nle": {
+              "file": "mx/mx-nle.json",
+              "count": 51,
+              "bytes": 123796,
+              "toleranceKm2": 0
+            },
+            "mx-oax": {
+              "file": "mx/mx-oax.json",
+              "count": 569,
+              "bytes": 227584,
+              "toleranceKm2": 2.695
+            },
+            "mx-pue": {
+              "file": "mx/mx-pue.json",
+              "count": 217,
+              "bytes": 149689,
+              "toleranceKm2": 0.591
+            },
+            "mx-que": {
+              "file": "mx/mx-que.json",
+              "count": 18,
+              "bytes": 57986,
+              "toleranceKm2": 0
+            },
+            "mx-roo": {
+              "file": "mx/mx-roo.json",
+              "count": 10,
+              "bytes": 55806,
+              "toleranceKm2": 0
+            },
+            "mx-slp": {
+              "file": "mx/mx-slp.json",
+              "count": 58,
+              "bytes": 146192,
+              "toleranceKm2": 0.034
+            },
+            "mx-sin": {
+              "file": "mx/mx-sin.json",
+              "count": 18,
+              "bytes": 111252,
+              "toleranceKm2": 0
+            },
+            "mx-son": {
+              "file": "mx/mx-son.json",
+              "count": 72,
+              "bytes": 149798,
+              "toleranceKm2": 0.231
+            },
+            "mx-tab": {
+              "file": "mx/mx-tab.json",
+              "count": 17,
+              "bytes": 96452,
+              "toleranceKm2": 0
+            },
+            "mx-tam": {
+              "file": "mx/mx-tam.json",
+              "count": 43,
+              "bytes": 119854,
+              "toleranceKm2": 0
+            },
+            "mx-tla": {
+              "file": "mx/mx-tla.json",
+              "count": 60,
+              "bytes": 70943,
+              "toleranceKm2": 0
+            },
+            "mx-ver": {
+              "file": "mx/mx-ver.json",
+              "count": 212,
+              "bytes": 149657,
+              "toleranceKm2": 1.013
+            },
+            "mx-yuc": {
+              "file": "mx/mx-yuc.json",
+              "count": 106,
+              "bytes": 148617,
+              "toleranceKm2": 0.203
+            },
+            "mx-zac": {
+              "file": "mx/mx-zac.json",
+              "count": 58,
+              "bytes": 148439,
+              "toleranceKm2": 0.118
+            }
+          }
+        }
+      }
+    }
+  }
+}
