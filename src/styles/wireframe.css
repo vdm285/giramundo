@@ -1,0 +1,124 @@
+/* Wireframe mode: the logic without the looks. System font, black on white,
+   no images, no shadows, no blur, no transitions. Everything still works:
+   tap a country, read the dossier, play the radio, run the game. Restyle
+   from here as you like (see docs/WIREFRAME.md). */
+
+:root { --dossier-w: 40vw; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; font: 15px/1.4 system-ui, sans-serif; color: #000; background: #fff; overflow: hidden; }
+button, input, select { font: inherit; }
+button { background: #fff; border: 1px solid #000; padding: 4px 8px; cursor: pointer; }
+button[aria-pressed="true"], button[aria-selected="true"], button[aria-current="true"] { background: #000; color: #fff; }
+a { color: #000; }
+img, iframe, video, .hero img, .vignette, .coach, .tip, .credit { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+h1, h2, h3 { font-weight: 700; margin: 12px 0 6px; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.1rem; }
+h3 { font-size: 1rem; }
+p { margin: 0 0 8px; }
+
+#stage { position: fixed; top: 48px; left: 0; bottom: 0; right: var(--dossier-w); }
+#c, #flat { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#c[hidden], #flat[hidden] { display: none; }
+
+.topbar { position: fixed; top: 0; left: 0; right: 0; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-bottom: 1px solid #000; background: #fff; z-index: 5; }
+.wordmark { font-weight: 700; text-decoration: none; }
+.wordmark small { font-weight: 400; margin-left: 6px; }
+.search { position: relative; flex: 1; }
+.search input { width: 100%; border: 1px solid #000; padding: 4px 8px; }
+.search svg { display: none; }
+.suggest { position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #000; z-index: 6; }
+.suggest:empty { display: none; }
+.suggest button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #ddd; }
+.seg { display: inline-flex; gap: 2px; }
+.topright { display: flex; gap: 6px; }
+
+.dossier { position: fixed; top: 48px; right: 0; bottom: 0; width: var(--dossier-w); border-left: 1px solid #000; background: #fff; display: flex; flex-direction: column; z-index: 5; }
+body.collapsed .dossier { display: none; }
+body.collapsed #stage { right: 0; }
+body.empty .dossier { display: none; }
+.dossier-scroll { overflow: auto; flex: 1; }
+.hero { padding: 8px 12px; border-bottom: 1px solid #000; }
+.hero .title { display: flex; gap: 8px; align-items: baseline; }
+.hero-tools { display: flex; gap: 4px; margin-bottom: 6px; }
+.hero-tools button svg { width: 12px; height: 12px; }
+.badge { font-weight: 700; }
+.secnav { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 12px; border-bottom: 1px solid #000; }
+.body { padding: 8px 12px; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 8px 0; }
+.facts span { font-size: 0.75rem; text-transform: uppercase; color: #555; display: block; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.chip { border: 1px solid #000; padding: 2px 6px; background: #fff; text-decoration: none; }
+.note { border-left: 3px solid #000; padding: 4px 8px; margin: 8px 0; }
+.muted { color: #555; }
+.small { font-size: 0.85rem; }
+.links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.headlines, .stations, .events, .guesses { list-style: none; margin: 0; padding: 0; }
+.headlines li, .stations li, .guesses li { border-bottom: 1px solid #ddd; padding: 4px 0; display: flex; gap: 8px; align-items: center; }
+.headlines li { flex-direction: column; align-items: flex-start; gap: 0; }
+.stations .play { width: 28px; height: 28px; }
+.stations .play svg { width: 12px; height: 12px; }
+.places { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.place { border: 1px solid #000; padding: 4px; text-align: left; background: #fff; position: relative; }
+.place .cap { font-weight: 600; }
+.place .yt { font-size: 0.8rem; }
+.people { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.person { border: 1px solid #000; padding: 4px; text-decoration: none; display: block; }
+.person .noface { display: none; }
+.now-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.now-grid .wx, .now-grid .cell { border: 1px solid #ddd; padding: 4px; }
+.now-grid .wx { grid-column: 1 / -1; }
+.video, .video-list, .embed { display: none; }
+.video-meta { display: flex; gap: 8px; }
+.ind { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px solid #ddd; padding: 4px 0; }
+.ind .k small { display: block; color: #555; font-size: 0.75rem; }
+.ind button { width: 28px; height: 28px; padding: 0; }
+.ind button svg { width: 12px; height: 12px; }
+.spark { width: 100%; height: 100px; }
+.spark .line { fill: none; stroke: #000; stroke-width: 1.5; }
+.spark .fill { fill: #eee; }
+.spark text { font-size: 10px; }
+.src { color: #555; font-size: 0.8rem; margin-top: 12px; border-top: 1px solid #ddd; padding-top: 6px; }
+.skel { height: 10px; background: #eee; margin: 4px 0; }
+
+.dock { position: fixed; left: 8px; bottom: 8px; display: flex; gap: 4px; z-index: 5; }
+.dock .gear svg { width: 12px; height: 12px; }
+.legend { position: fixed; left: 8px; top: 56px; background: #fff; border: 1px solid #000; padding: 6px 8px; z-index: 5; width: 240px; }
+.legend .bar { height: 8px; margin: 4px 0; }
+.legend .ticks { display: flex; justify-content: space-between; font-size: 0.75rem; }
+.toast { position: fixed; left: 8px; bottom: 48px; background: #fff; border: 1px solid #000; padding: 4px 8px; z-index: 6; }
+.toast.ask button { margin-left: 6px; }
+.player { position: fixed; left: 8px; bottom: 48px; display: flex; gap: 6px; align-items: center; background: #fff; border: 1px solid #000; padding: 4px 8px; z-index: 6; }
+.player .pbtn { width: 28px; height: 28px; padding: 0; }
+.player .pbtn svg { width: 12px; height: 12px; }
+.player .pinfo { display: flex; flex-direction: column; }
+.player .pinfo button { border: 0; padding: 0; text-align: left; }
+.playmenu { position: fixed; left: 8px; bottom: 48px; width: 320px; background: #fff; border: 1px solid #000; padding: 8px; z-index: 7; max-height: 70vh; overflow: auto; }
+.playmenu .tour { display: block; width: 100%; text-align: left; margin: 2px 0; }
+.playmenu .tour span { display: block; color: #555; font-size: 0.85rem; }
+.playmenu .opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.game { padding: 8px 12px; }
+.game .scale { height: 8px; background: linear-gradient(90deg, #ccc, #000); margin: 6px 0; }
+.game .ticks { display: flex; justify-content: space-between; font-size: 0.8rem; }
+.guesses .swatch { width: 10px; height: 10px; border: 1px solid #000; }
+.rounds { display: flex; gap: 4px; }
+.rounds i { width: 10px; height: 10px; border: 1px solid #000; display: block; }
+.rounds i.hit { background: #000; }
+.rounds i.miss { background: #888; }
+.game .acts, .acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tourbar { position: fixed; top: 56px; left: 8px; display: flex; gap: 6px; align-items: center; background: #fff; border: 1px solid #000; padding: 4px 8px; z-index: 6; }
+.tourbar button { width: 28px; height: 28px; padding: 0; }
+.tourbar button svg { width: 12px; height: 12px; }
+.tourbar .bar { display: none; }
+.compare { border: 1px solid #000; padding: 6px; margin-bottom: 8px; }
+.compare header { display: flex; justify-content: space-between; }
+.crow { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 4px; border-bottom: 1px solid #ddd; padding: 2px 0; }
+dialog { border: 1px solid #000; padding: 12px; max-width: 520px; }
+dialog .x { float: right; border: 0; }
+.settings .opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.settings .help { color: #555; font-size: 0.85rem; }
+.settings .row { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+.linkish { border: 0; background: none; padding: 0; text-decoration: underline; cursor: pointer; }
+.boot { padding: 20px; }

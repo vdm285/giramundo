@@ -28,7 +28,7 @@ function ppdToDist(ppd, h) {
   return (h / 2) / (radiusPx * Math.tan(fov / 2));
 }
 
-export function createFlatMap(canvas, world, { base }) {
+export function createFlatMap(canvas, world, { base, wire = false }) {
   const ctx = canvas.getContext('2d');
   const view = { lat: 15, lon: -40, dist: 4.2 };
   const taps = new Set();
@@ -57,7 +57,7 @@ export function createFlatMap(canvas, world, { base }) {
   const day = new Image();
   day.crossOrigin = 'anonymous';
   day.onload = () => { dirty = true; };
-  day.src = `${base}${DAY_URL}`;
+  if (!wire) day.src = `${base}${DAY_URL}`;
 
   // Night mask: a coarse per-pixel sun test, redrawn every minute.
   const night = document.createElement('canvas');
@@ -175,6 +175,18 @@ export function createFlatMap(canvas, world, { base }) {
     for (const off of worldCopies(x0, worldW, w + 2 * margin)) {
       c.save();
       c.translate(off * worldW, 0);
+      if (wire) {
+        // Wireframe: white paper, black outlines, nothing else.
+        c.fillStyle = '#fff';
+        c.fillRect(x0, y0, worldW, mapH);
+        c.strokeStyle = '#000';
+        c.lineWidth = 0.8;
+        c.beginPath();
+        for (const f of world.features) cpath(f);
+        c.stroke();
+        c.restore();
+        continue;
+      }
       if (style === 'earth') {
         if (day.complete && day.naturalWidth) c.drawImage(day, x0, y0, worldW, mapH);
         else { c.fillStyle = '#10243b'; c.fillRect(x0, y0, worldW, mapH); }

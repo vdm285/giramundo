@@ -4,7 +4,7 @@ Spin the Earth. Tap a country. See it, know it, and feel what is happening there
 
 Live: https://vdm285.github.io/giramundo/
 
-The product vision and roadmap are in [`docs/VISION.md`](docs/VISION.md). How the data is collected is in [`docs/PIPELINES.md`](docs/PIPELINES.md). The state of the code is in [`HANDOFF.md`](HANDOFF.md). Rules for the words on a card are in [`docs/EDITORIAL.md`](docs/EDITORIAL.md).
+The product vision and roadmap are in [`docs/VISION.md`](docs/VISION.md). The look-free wireframe mode and the `wireframe` branch are explained in [`docs/WIREFRAME.md`](docs/WIREFRAME.md). How the data is collected is in [`docs/PIPELINES.md`](docs/PIPELINES.md). The state of the code is in [`HANDOFF.md`](HANDOFF.md). Rules for the words on a card are in [`docs/EDITORIAL.md`](docs/EDITORIAL.md).
 
 ## Run it
 

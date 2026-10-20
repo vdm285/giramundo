@@ -307,7 +307,7 @@ async function mountSurface(flat) {
   document.body.classList.toggle('flat', flat);
   let next;
   if (flat) {
-    next = createFlatMap(flatCanvas, world, { base });
+    next = createFlatMap(flatCanvas, world, { base, wire: WIRE });
   } else {
     const { createGlobe } = await import('../globe/scene.js');
     next = await createGlobe(canvas, world, { base, reduced });
@@ -743,7 +743,10 @@ function watchPerformance() {
   }, 2500);
 }
 
-export async function boot() {
+let WIRE = false;
+
+export async function boot({ wire = false } = {}) {
+  WIRE = wire;
   const bootError = document.getElementById('boot-error');
   const hashed = parseHash(location.hash);
   const lang = hashed?.lang || readSetting('lang', 'es');
@@ -777,6 +780,8 @@ export async function boot() {
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
+  // Wireframe: the flat map in atlas style, no 3D, no plates (docs/WIREFRAME.md).
+  if (WIRE) store.set({ flat: true, view: 'atlas', quality: 'simple' });
 
   try {
     world = await loadWorld(base);
@@ -799,6 +804,7 @@ export async function boot() {
     document.body.classList.toggle('empty', !s.id && !s.game);
     document.body.classList.toggle('picking', Boolean(s.picking));
     document.body.classList.toggle('wide', Boolean(s.wide));
+    document.body.classList.toggle('wire', WIRE);
     render(shell(s), ui);
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
     if (location.hash !== next) history.replaceState(null, '', next);
