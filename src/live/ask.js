@@ -1,8 +1,10 @@
-// "Pregúntale a la IA": a context-rich prompt assembled from what the reader
-// has on screen, opened in Google AI Mode in their own browser. No key, no
-// API, nothing leaves the page until the reader clicks. Verified 2026-10-20:
-// google.com/search?q=...&udm=50&sn=aim opens AI Mode with the query, and a
-// 2,000-character Spanish prompt answered with cited sources.
+// "Preguntar": a short, targeted prompt opened in Google AI Mode in the
+// reader's own browser. No key, no API, nothing leaves the page until the
+// reader clicks. Verified 2026-10-20: google.com/search?q=...&udm=50&sn=aim
+// opens AI Mode with the query and answers with cited sources.
+//
+// Prompts are deliberately short: the model does not need to know about
+// this app, only the country, the thing in focus and the question.
 
 const MAX = 1800;
 
@@ -10,73 +12,68 @@ export function aiModeUrl(prompt) {
   return `https://www.google.com/search?udm=50&sn=aim&q=${encodeURIComponent(prompt.slice(0, MAX))}`;
 }
 
-function list(items, n) {
-  return items.filter(Boolean).slice(0, n).join(', ');
+const list = (items, n) => items.filter(Boolean).slice(0, n).join(', ');
+
+// One headline, one country: history, culture, sides, and what locals say.
+export function headlinePrompt(headline, countryName, lang) {
+  return lang === 'es'
+    ? `Noticia de ${countryName}: "${headline}". Explica el contexto histórico y cultural que ayuda a entenderla, qué partes están en juego y qué opinan los locales (incluye foros como Reddit). Fuentes recientes.`
+    : `News from ${countryName}: "${headline}". Explain the historical and cultural context behind it, who the parties are, and what locals are saying (include forums like Reddit). Recent sources.`;
 }
 
-// Build the prompt for the current view. `m` is the dossier model: lang,
-// country, section, content, places, culture, city, compare (country), world.
+// The prompt for the current view: country or city, the items in focus, one question.
 export function buildPrompt(m) {
   const { lang, country, section, content = {}, places, culture, city, compareCountry } = m;
   const es = lang === 'es';
   const name = country?.name?.[lang] || country?.name?.en || '';
-  const parts = [];
-  const read = [];
+  const cname = city ? (city.name?.[lang] || city.name?.en) : null;
+  const where = cname ? `${cname}, ${name}` : name;
+  const tail = es ? 'Fuentes recientes.' : 'Recent sources.';
 
-  if (city) {
-    const cname = city.name?.[lang] || city.name?.en;
-    parts.push(es
-      ? `Estoy explorando ${cname}, ${name}, en Giramundo, un globo interactivo.`
-      : `I am exploring ${cname}, ${name}, on Giramundo, an interactive globe.`);
-    if (content.citySummary?.description) read.push(content.citySummary.description);
-  } else {
-    parts.push(es
-      ? `Estoy explorando ${name} en Giramundo, un globo interactivo.`
-      : `I am exploring ${name} on Giramundo, an interactive globe.`);
-  }
-
-  const capital = country?.capital?.[lang] || country?.capital?.en;
-  if (capital && !city) read.push(es ? `capital ${capital}` : `capital ${capital}`);
-
-  if (section === 'ahora' || section === 'historia') {
-    const heads = [...(content.news?.[lang] || []), ...(content.news?.[lang === 'es' ? 'en' : 'es'] || [])].slice(0, 4).map((n) => `"${n.title}"`);
-    if (heads.length) read.push((es ? 'titulares de hoy: ' : "today's headlines: ") + heads.join(', '));
-  }
-  if (section === 'comida') {
-    const dishes = (places?.dishes || []).map((d) => d.label?.local && d.label.local !== (d.label?.[lang] || '') ? `${d.label?.[lang] || d.label?.en} (${d.label.local})` : (d.label?.[lang] || d.label?.en));
-    if (dishes.length) read.push((es ? 'platos típicos: ' : 'typical dishes: ') + list(dishes, 8));
-  }
-  if (section === 'lugares') {
-    const sites = (places?.heritage || []).map((h) => h.label?.[lang] || h.label?.en);
-    if (sites.length) read.push((es ? 'sitios Patrimonio de la Humanidad: ' : 'World Heritage sites: ') + list(sites, 8));
-    if (content.place) read.push((es ? 'me interesa en particular ' : 'I am especially interested in ') + (content.place.label?.[lang] || content.place.label?.en));
-  }
-  if (section === 'cultura') {
-    const people = (culture?.people || []).map((p) => p.label?.[lang] || p.label?.en);
-    if (people.length) read.push((es ? 'gente notable: ' : 'notable people: ') + list(people, 8));
-    const langs = (culture?.languages || []).map((l) => l.label?.[lang] || l.label?.en);
-    if (langs.length) read.push((es ? 'idiomas: ' : 'languages: ') + list(langs, 4));
-    if (culture?.anthem?.label) read.push((es ? 'himno: ' : 'anthem: ') + (culture.anthem.label[lang] || culture.anthem.label.en));
-  }
-  if (section === 'datos' && country?.population) {
-    read.push(es ? `población ${country.population.toLocaleString('es-MX')}` : `population ${country.population.toLocaleString('en-US')}`);
-  }
   if (compareCountry) {
-    read.push((es ? 'lo comparo con ' : 'I am comparing it with ') + (compareCountry.name?.[lang] || compareCountry.name?.en));
+    const other = compareCountry.name?.[lang] || compareCountry.name?.en;
+    return es
+      ? `${name} y ${other}: compara su historia reciente, economía y vida cotidiana. ¿Qué los acerca y qué los separa? ${tail}`
+      : `${name} and ${other}: compare recent history, economy and everyday life. What brings them together and what sets them apart? ${tail}`;
   }
 
-  if (read.length) parts.push((es ? 'Leí en la ficha: ' : 'I read on the card: ') + read.join('; ') + '.');
-
-  const ask = {
-    ahora: es ? `¿Qué está pasando esta semana en ${name} y qué contexto histórico ayuda a entenderlo?` : `What is happening this week in ${name}, and what historical context helps make sense of it?`,
-    historia: es ? `¿Qué momentos de la historia de ${name} explican mejor cómo es hoy?` : `Which moments in ${name}'s history best explain how it is today?`,
-    comida: es ? `¿Cómo preparan estos platos los locales y qué los hace diferentes de las versiones para turistas?` : `How do locals actually prepare these dishes, and what makes them different from the tourist versions?`,
-    cultura: es ? `¿Qué debería saber sobre la cultura cotidiana de ${name}, más allá de los clichés?` : `What should I know about everyday culture in ${name}, beyond the clichés?`,
-    lugares: es ? `¿Cuál es la historia detrás de estos lugares y cómo se visitan hoy?` : `What is the story behind these places, and how are they visited today?`,
-    ver: es ? `¿Qué barrios o calles de ${city ? (city.name?.[lang] || city.name?.en) : name} vale la pena caminar y por qué?` : `Which neighborhoods or streets of ${city ? (city.name?.[lang] || city.name?.en) : name} are worth walking, and why?`,
-    datos: es ? `¿Qué explican estas cifras sobre ${name} y cómo han cambiado en las últimas décadas?` : `What do these figures say about ${name}, and how have they changed over recent decades?`,
-  };
-  parts.push(ask[section] || ask.ahora);
-  parts.push(es ? 'Responde en español con fuentes recientes.' : 'Answer in English with recent sources.');
-  return parts.join(' ').slice(0, MAX);
+  switch (section) {
+    case 'ahora': {
+      const heads = [...(content.news?.[lang] || []), ...(content.news?.[es ? 'en' : 'es'] || [])].slice(0, 3).map((n) => `"${n.title}"`);
+      return es
+        ? `${where}, esta semana. Titulares: ${heads.join('; ') || 'sin titulares a la mano'}. ¿Qué está pasando, qué historia reciente lo explica y qué dicen los locales? ${tail}`
+        : `${where}, this week. Headlines: ${heads.join('; ') || 'none at hand'}. What is happening, what recent history explains it, and what are locals saying? ${tail}`;
+    }
+    case 'comida': {
+      const dishes = (places?.dishes || []).map((d) => (d.label?.local && d.label.local !== (d.label?.[lang] || '') ? d.label.local : (d.label?.[lang] || d.label?.en)));
+      return es
+        ? `Cocina de ${where}: ${list(dishes, 6)}. ¿Cómo los preparan en casa los locales, en qué regiones y ocasiones se comen, y qué versiones turísticas conviene evitar? ${tail}`
+        : `Food of ${where}: ${list(dishes, 6)}. How do locals cook them at home, in which regions and occasions, and which tourist versions should be avoided? ${tail}`;
+    }
+    case 'cultura': {
+      const people = (culture?.people || []).map((p) => p.label?.[lang] || p.label?.en);
+      return es
+        ? `Cultura cotidiana de ${where}, más allá de los clichés: costumbres, humor, música que escuchan los locales, y por qué figuras como ${list(people, 4)} importan allí. ${tail}`
+        : `Everyday culture of ${where}, beyond the clichés: customs, humor, the music locals listen to, and why figures like ${list(people, 4)} matter there. ${tail}`;
+    }
+    case 'lugares': {
+      const focus = content.place ? (content.place.label?.[lang] || content.place.label?.en) : null;
+      const sites = (places?.heritage || []).map((h) => h.label?.[lang] || h.label?.en);
+      return es
+        ? `${focus || list(sites, 5)} (${where}): historia detrás del lugar, cómo lo viven los locales hoy y cómo se visita sin la versión de postal. ${tail}`
+        : `${focus || list(sites, 5)} (${where}): the story behind the place, how locals relate to it today, and how to visit it without the postcard version. ${tail}`;
+    }
+    case 'ver':
+      return es
+        ? `Barrios y calles de ${cname || name} por los que caminan los locales, no los turistas: cuáles, a qué hora, y qué se come por ahí. ${tail}`
+        : `Neighborhoods and streets of ${cname || name} where locals walk, not tourists: which ones, when, and what to eat nearby. ${tail}`;
+    case 'datos':
+      return es
+        ? `${name}: ¿cómo han cambiado población, esperanza de vida e ingreso por persona en las últimas décadas, y qué lo explica? ${tail}`
+        : `${name}: how have population, life expectancy and income per person changed over recent decades, and what explains it? ${tail}`;
+    default:
+      return es
+        ? `${where}: ¿qué momentos de su historia explican mejor cómo es hoy, y qué sigue pesando en la vida diaria? ${tail}`
+        : `${where}: which moments of its history best explain how it is today, and what still weighs on daily life? ${tail}`;
+  }
 }

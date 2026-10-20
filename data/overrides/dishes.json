@@ -1,0 +1,27 @@
+{
+  "_readme": "Per-country curation of the Comida card, read by tools/build-places.mjs (npm run places). Every entry is a Wikidata item (Q-id) that exists and has a photo (P18); nothing here describes a dish, it only points at one. include = goes first, in this order; region = short es/en strings shown on the card; exclude = never shown. See docs/PIPELINES.md, 'How to curate a country'.",
+  "MX": {
+    "note": "Wikidata files Tex-Mex and US border food under Mexican cuisine (chili con carne, chimichanga, nachos) and misses most regional dishes, which carry country of origin = Mexico but no cuisine statement. Curated 2026-10-20: one or two dishes per region, locals' food first. Guacamole is included explicitly because Wikidata also files it under Tex-Mex, which the generic filter drops. Burrito (Q390823) is not excluded: Wikidata records its origin as Mexico and it is not filed under any cuisine, so it does not appear anyway. Nachos were born in Piedras Negras, Coahuila (Wikidata agrees), but they are a border snack, not what a Mexican table serves; excluded by taste, not by data.",
+    "include": [
+      { "qid": "Q2386967", "region": { "es": "Ciudad de México", "en": "Mexico City" } },
+      { "qid": "Q4804467", "region": { "es": "Yucatán", "en": "Yucatán" } },
+      { "qid": "Q3319470", "region": { "es": "Puebla", "en": "Puebla" } },
+      { "qid": "Q515692", "region": { "es": "Centro y Occidente", "en": "Centre and West" } },
+      { "qid": "Q7810735", "region": { "es": "Oaxaca", "en": "Oaxaca" } },
+      { "qid": "Q4916959", "region": { "es": "Jalisco", "en": "Jalisco" } },
+      { "qid": "Q5044066", "region": { "es": "Michoacán", "en": "Michoacán" } },
+      { "qid": "Q2838998", "region": { "es": "Hidalgo", "en": "Hidalgo" } },
+      { "qid": "Q1072902", "region": { "es": "Puebla", "en": "Puebla" } },
+      { "qid": "Q19949631", "region": { "es": "Sinaloa", "en": "Sinaloa" } },
+      { "qid": "Q17073167", "region": { "es": "Veracruz", "en": "Veracruz" } },
+      { "qid": "Q7827283", "region": { "es": "Guadalajara, Jalisco", "en": "Guadalajara, Jalisco" } },
+      { "qid": "Q28155493", "region": { "es": "Yucatán", "en": "Yucatán" } },
+      { "qid": "Q11765230", "region": { "es": "Norte (Sonora, Nuevo León)", "en": "North (Sonora, Nuevo León)" } },
+      { "qid": "Q2963582", "region": { "es": "Todo el país", "en": "Nationwide" } },
+      { "qid": "Q1147853", "region": { "es": "Todo el país", "en": "Nationwide" } },
+      { "qid": "Q876096", "region": { "es": "Todo el país", "en": "Nationwide" } },
+      { "qid": "Q207968", "region": { "es": "Todo el país", "en": "Nationwide" } }
+    ],
+    "exclude": ["Q863794", "Q2666603", "Q466430", "Q871272"]
+  }
+}

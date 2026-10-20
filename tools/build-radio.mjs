@@ -160,7 +160,14 @@ function localScore(s, country) {
 }
 
 function select(rows, country) {
-  const ok = rows.filter(playable);
+  // International pop and generic music stations are dropped outright: the
+  // reader wants local speech and local music. A station stays if it has a
+  // local marker (talk, news, folk genres, public), or if the country would
+  // otherwise keep fewer than three.
+  const all = rows.filter(playable);
+  const isGlobalMusic = (s) => GLOBAL_TAGS.test(String(s.tags || '').toLowerCase()) && !LOCAL_TAGS.test(String(s.tags || '').toLowerCase());
+  const kept = all.filter((s) => !isGlobalMusic(s));
+  const ok = kept.length >= 3 ? kept : all;
   ok.sort((a, b) => (localScore(b, country) - localScore(a, country)) || (b.votes - a.votes) || (b.clickcount - a.clickcount));
   if (process.env.RADIO_DEBUG === country?.iso2) for (const s of ok.slice(0, 12)) console.log(localScore(s, country), s.votes, s.name.slice(0, 30), '|', s.language, '|', String(s.tags).slice(0, 60));
   const codecOf = (s) => norm(s.codec).toUpperCase();

@@ -8,6 +8,7 @@ import { formatCompact, formatCount, formatTime, mainZone, sentences } from '../
 import { haversineKm } from '../geo/math.js';
 import { commonsPage, commonsThumb } from '../live/sources.js';
 import { shortName } from '../live/radio.js';
+import { aiModeUrl, headlinePrompt } from '../live/ask.js';
 
 const MAPS_KEY = import.meta.env.VITE_MAPS_EMBED_KEY || '';
 
@@ -48,9 +49,7 @@ export function renderRadio(m) {
   const stations = country.iso2 ? world.radio?.[country.iso2] : null;
   if (!world.radio) return nothing;
   return html`
-    <h2>${t(lang, 'radio')}</h2>
-    <p class="small muted">${t(lang, 'radioLead')}</p>
-    ${stations?.length ? html`<ul class="stations">${stations.map((s) => {
+    ${stations?.length ? html`<ul class="stations" aria-label=${t(lang, 'radio')}>${stations.map((s) => {
       const current = radio?.station?.id === s.id;
       const busy = current && (radio.status === 'playing' || radio.status === 'loading');
       return html`<li aria-current=${current}>
@@ -106,10 +105,7 @@ export function renderAhora(m) {
 
     ${renderRadio(m)}
 
-    <h2>${t(lang, 'nowHeadlines')}</h2>
-    ${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang)}
-
-    ${renderBackground(m)}
+    ${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang, country)}
 
     ${shown.length ? html`
       <h2>${t(lang, 'nowOnThisDay')}</h2>
@@ -146,12 +142,16 @@ function renderBackground(m) {
     <p class="small muted">Wikipedia · CC BY-SA</p>`;
 }
 
-function headlines(news, lang) {
+function headlines(news, lang, country) {
   const primary = lang === 'es' ? news.es : news.en;
   const secondary = lang === 'es' ? news.en : news.es;
+  const cname = country?.name?.[lang] || country?.name?.en || '';
+  // Each headline carries a "Contexto" link: a short prompt to Google AI Mode
+  // that asks for the history, the sides and what locals say about it.
   const list = (items) => html`<ul class="headlines">${items.map((n) => html`
     <li><a href=${n.url} target="_blank" rel="noreferrer">${n.title}</a>
-      <div class="meta"><span>${n.source || ''}</span>${n.published ? html`<span>${timeAgo(n.published, lang)}</span>` : nothing}</div></li>`)}</ul>`;
+      <div class="meta"><span>${n.source || ''}</span>${n.published ? html`<span>${timeAgo(n.published, lang)}</span>` : nothing}
+        <a class="ctx" href=${aiModeUrl(headlinePrompt(n.title, cname, lang))} target="_blank" rel="noreferrer noopener" title=${t(lang, 'contextTitle')}>✦ ${t(lang, 'context')}</a></div></li>`)}</ul>`;
   if (!primary?.length && !secondary?.length) return html`<p class="muted">${t(lang, 'nowNoNews')}</p>`;
   return html`
     ${primary?.length ? list(primary) : nothing}
@@ -206,14 +206,12 @@ function renderCulture(m) {
   const nf = (n) => new Intl.NumberFormat(locale(lang), { notation: 'compact', maximumFractionDigits: 1 }).format(n);
   return html`
     ${anthem ? html`
-      <h3>${t(lang, 'anthem')}</h3>
       <p style="margin:0 0 6px"><strong>${anthem.label?.[lang] || anthem.label?.en || ''}</strong>
         ${anthem.wiki?.[lang] || anthem.wiki?.en ? html` · <a href=${anthem.wiki?.[lang] || anthem.wiki?.en} target="_blank" rel="noreferrer">Wikipedia</a>` : nothing}</p>
       ${anthem.audio ? html`<audio controls preload="none" src=${commonsThumb(anthem.audio).replace(/\?width=\d+$/, '')} style="width:100%"></audio>
         <p class="small muted"><a href=${commonsPage(anthem.audio)} target="_blank" rel="noreferrer">Wikimedia Commons</a> · ${t(lang, 'anthemNote')}</p>` : nothing}` : nothing}
     ${langs.length ? html`
-      <h3>${t(lang, 'languages')}</h3>
-      <div class="chips">${langs.map((l) => {
+      <div class="chips" style="margin-top:10px" aria-label=${t(lang, 'languages')}>${langs.map((l) => {
         const station = m.stationFor?.(l);
         const current = station && m.radio?.station?.id === station.id;
         return html`<span class="chip hear" aria-current=${Boolean(current)} title=${station ? `${t(lang, 'hearLangTitle')}: ${station.name}` : (l.speakers ? `${nf(l.speakers)} ${t(lang, 'speakers')}` : '')}>
@@ -223,8 +221,7 @@ function renderCulture(m) {
       })}</div>
       <p class="small muted">${t(lang, 'languagesNote')} ${t(lang, 'hearLangTitle')}.</p>` : nothing}
     ${people.length ? html`
-      <h3>${t(lang, 'people')}</h3>
-      <div class="people">${people.map((p) => html`
+      <div class="people" style="margin-top:14px" aria-label=${t(lang, 'people')}>${people.map((p) => html`
         <a class="person" href=${`https://www.wikidata.org/wiki/${p.qid}`} target="_blank" rel="noreferrer" title=${p.desc?.[lang] || p.desc?.en || ''}>
           ${p.image ? html`<img loading="lazy" src=${commonsThumb(p.image, 240)} alt="">` : html`<div class="noface">${(p.label?.[lang] || p.label?.en || '?').slice(0, 1)}</div>`}
           <strong>${p.label?.[lang] || p.label?.en}</strong>
@@ -237,8 +234,7 @@ function renderCulture(m) {
 function dishList(dishes, lang) {
   if (!dishes.length) return nothing;
   return html`
-    <h3>${lang === 'es' ? 'Platos típicos' : 'Typical dishes'}</h3>
-    <div class="places">${dishes.slice(0, 6).map((d) => {
+    <div class="places" aria-label=${lang === 'es' ? 'Platos típicos' : 'Typical dishes'}>${dishes.slice(0, 8).map((d) => {
       const name = d.label?.[lang] || d.label?.en || '';
       const local = d.label?.local && d.label.local !== name ? d.label.local : '';
       // Search with the local name too: recipes by locals, for locals.
@@ -261,7 +257,6 @@ export function renderLugares(m) {
   if (!sites.length) return html`<p class="muted">${t(lang, 'placesNone')}</p>`;
   const sel = m.place;
   return html`
-    <h2>${t(lang, 'placesHeritage')} <span class="muted small">· ${sites.length}</span></h2>
     ${sel ? html`
       <div class="place-detail">
         ${sel.image ? html`<img src=${commonsThumb(sel.image, 900)} alt="">` : nothing}

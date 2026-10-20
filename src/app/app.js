@@ -299,8 +299,10 @@ function syncMarkers() {
     if (!c.ll || !c.iso2 || c.onMap) continue;
     if (dist < 3.2 || c.iso2 === s.id) markers.push({ lat: c.ll[0], lon: c.ll[1], id: c.iso2, color: '#f6d78a', size: 9, kind: 'country' });
   }
+  // City dots only when the reader is close in on the selected country, not
+  // at the world scale; the country-focus view will own this later.
   const cities = country?.iso2 ? world.cities?.[country.iso2] : null;
-  if (cities && (dist < 2.0 || s.city)) {
+  if (cities && (dist < 1.5 || s.city)) {
     for (const c of cities) {
       markers.push({ lat: c.ll[0], lon: c.ll[1], id: c.id, color: c.capital ? '#ffd27a' : '#fff4dc', size: c.capital ? 9 : 7, kind: 'city', city: c, highlight: s.city?.id === c.id });
     }
@@ -631,10 +633,10 @@ function shell(s) {
   const nf = (n) => new Intl.NumberFormat(s.lang === 'es' ? 'es-MX' : 'en-US', { maximumFractionDigits: legend?.def.decimals ?? 1, notation: n > 99999 ? 'compact' : 'standard' }).format(n);
   return html`
     <header class="topbar">
-      <a class="wordmark" href="#" @click=${(e) => { e.preventDefault(); select('MX', { turns: 0 }); }}>Giramundo <small>${t(s.lang, 'tagline')}</small></a>
-      <form class="search" role="search" autocomplete="off" @submit=${onSearchSubmit}>
-        ${searchIcon}
-        <input id="q" type="search" placeholder=${t(s.lang, 'search')} aria-label=${t(s.lang, 'search')} @input=${onSearchInput} @keydown=${onSearchKey} @blur=${() => setTimeout(() => store.set({ hits: [] }), 150)}>
+      <a class="wordmark" href="#" @click=${(e) => { e.preventDefault(); select(s.home || 'MX', { turns: 0 }); }}>Giramundo</a>
+      <form class="search ${s.searchOpen ? 'open' : ''}" role="search" autocomplete="off" @submit=${onSearchSubmit}>
+        <button type="button" class="lens" aria-label=${t(s.lang, 'search')} aria-expanded=${Boolean(s.searchOpen)} @click=${() => { store.set({ searchOpen: !s.searchOpen }); requestAnimationFrame(() => document.getElementById('q')?.focus()); }}>${searchIcon}</button>
+        <input id="q" type="search" placeholder=${t(s.lang, 'search')} aria-label=${t(s.lang, 'search')} tabindex=${s.searchOpen ? '0' : '-1'} @input=${onSearchInput} @keydown=${onSearchKey} @blur=${() => setTimeout(() => { store.set({ hits: [] }); if (!document.getElementById('q')?.value) store.set({ searchOpen: false }); }, 150)}>
         <div class="suggest" role="listbox">
           ${(s.hits || []).map((c, i) => html`<button type="button" role="option" aria-selected=${i === searchIndex} @mousedown=${(e) => e.preventDefault()} @click=${() => pickHit(c)}>
             ${c.flag ? html`<img alt="" src=${base + c.flag}>` : nothing}${c.name[s.lang] || c.name.en}
@@ -647,15 +649,10 @@ function shell(s) {
           <button aria-pressed=${s.flat} title=${s.flat ? t(s.lang, 'viewGlobe') : t(s.lang, 'viewFlat')} aria-label=${s.flat ? t(s.lang, 'viewGlobe') : t(s.lang, 'viewFlat')} @click=${() => on('flat', !s.flat)}>${s.flat ? globeIcon : flatIcon}</button>
         </div>
         <button class="ghost" @click=${() => on('lang')}>${t(s.lang, 'langSwitch')}</button>
+        <button class="ghost icon gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
       </div>
     </header>
-    <nav class="dock">
-      <button @click=${() => on('surprise')}>${t(s.lang, 'surprise')}</button>
-      ${s.collapsed && country ? html`<button @click=${() => on('collapse')}>${t(s.lang, 'expand')}</button>` : nothing}
-      <button @click=${() => on('playmenu')} aria-expanded=${s.playmenu}>${t(s.lang, 'play')}</button>
-      <button @click=${() => on('about')}>${t(s.lang, 'about')}</button>
-      <button class="gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
-    </nav>
+    ${s.collapsed && country ? html`<button class="reopen" @click=${() => on('collapse')} aria-label=${t(s.lang, 'expand')}>${country.flag ? html`<img alt="" src=${base + country.flag}>` : nothing}${country.name[s.lang] || country.name.en}</button>` : nothing}
     ${s.playmenu ? renderPlayMenu({ lang: s.lang, on, tours: play.tours(s.lang) }) : nothing}
     ${s.tour ? renderTourBar({ lang: s.lang, tour: s.tour, on, progress: play.tourProgress() }) : nothing}
     <dialog id="settings" class="settings">
@@ -673,6 +670,9 @@ function shell(s) {
       <div class="opts"><button @click=${() => on('set-home')} ?disabled=${!s.id || s.id === s.home}>${t(s.lang, 'setHome')}</button></div>
       <label class="row"><input type="checkbox" .checked=${s.spin} @change=${(e) => on('spin', e.target.checked)}> ${t(s.lang, 'spin')}</label>
       <label class="row">${t(s.lang, 'sunOffset')} <input type="range" min="-12" max="12" step="0.5" .value=${String(s.sun)} @input=${(e) => on('sun', Number(e.target.value))}> <button type="button" class="chip" @click=${() => on('sun', 0)}>${t(s.lang, 'sunNow')}</button></label>
+      <h3>${t(s.lang, 'about')}</h3>
+      <p class="help">${t(s.lang, 'aboutLead')} ${t(s.lang, 'aboutP2')}</p>
+      <p class="help">${t(s.lang, 'aboutP3')} ${t(s.lang, 'aboutP4')} <a href="https://github.com/vdm285/giramundo" target="_blank" rel="noreferrer">github.com/vdm285/giramundo</a></p>
     </dialog>
     ${s.radio?.station ? (() => {
       const r = s.radio;
@@ -892,6 +892,7 @@ export async function boot({ wire = false } = {}) {
     moneyIdx: 0,
     ask: null,
     convertAmount: 100,
+    searchOpen: false,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));

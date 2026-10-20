@@ -220,6 +220,40 @@ SELECT ?c ?demo ?gender ?number WHERE {
 //    origin recorded. Restaurants, chains and brands filed under a cuisine
 //    are excluded by type (a full food-class check times out on WDQS).
 //    Join order pinned, see below.
+//
+//    Two more filters apply to every country (see docs/PIPELINES.md):
+//    - a dish filed under Tex-Mex cuisine (P2012 = Q29359) is dropped, even
+//      when it is also filed under the country's own cuisine (chili con carne
+//      sits under Mexican, US and Tex-Mex cuisine with origin Mexico);
+//    - a dish with no country of origin (P495) stays only when its cuisine
+//      statement names this country's cuisine item (the "national dish"
+//      branch below also reaches items through P17, which is kept).
+//
+//    Per-country curation lives in data/overrides/dishes.json (committed):
+//    { "MX": { "include": ["Q…" | { "qid": "Q…", "region": { "es", "en" } }],
+//              "exclude": ["Q…"], "note": "why" } }
+//    Included items are fetched from Wikidata (label, photo, Wikipedia links)
+//    and go first, in the file's order; they bypass the generic filters since
+//    a person vouched for them. An included item must exist and have a photo
+//    (P18) or it is skipped with a warning: the file names Wikidata items, it
+//    does not describe dishes. Excluded items are dropped wherever they came
+//    from. The generic list fills the remaining slots up to MAX_DISHES.
+
+const TEX_MEX = 'Q29359';
+const OVERRIDES = join(root, 'data/overrides/dishes.json');
+let overrides = {};
+try {
+  overrides = JSON.parse(await readFile(OVERRIDES, 'utf8'));
+} catch (err) {
+  if (err.code !== 'ENOENT') throw new Error(`${OVERRIDES}: ${err.message}`);
+}
+const overrideOf = (iso) => {
+  const o = overrides[iso] || {};
+  const include = (o.include || []).map((x) => (typeof x === 'string' ? { qid: x, region: null } : { qid: x.qid, region: x.region || null }));
+  return { include, exclude: new Set(o.exclude || []) };
+};
+const filterStats = { texmex: new Map(), origin: new Map(), noCuisine: new Map(), excluded: new Map() };
+const bump = (m, iso) => m.set(iso, (m.get(iso) || 0) + 1);
 
 const cuisine = new Map();
 {
@@ -256,7 +290,9 @@ const dishes = new Map(); // iso -> [{qid,label,image,national,links}]
     const rows = await sparql(`
 SELECT ?dish ?c ?cuisine ?national (SAMPLE(?img) AS ?image) (SAMPLE(?links) AS ?links)
        (SAMPLE(?les) AS ?les) (SAMPLE(?len) AS ?len) (SAMPLE(?lmul) AS ?lmul)
-       (GROUP_CONCAT(DISTINCT STR(?origin); separator=" ") AS ?origins) WHERE {
+       (SAMPLE(?wes) AS ?wes) (SAMPLE(?wen) AS ?wen)
+       (GROUP_CONCAT(DISTINCT STR(?origin); separator=" ") AS ?origins)
+       (GROUP_CONCAT(DISTINCT STR(?cui); separator=" ") AS ?cuisines) WHERE {
   hint:Query hint:optimizer "None" .
   {
     VALUES ?cuisine { ${cuisineValues || 'wd:Q0'} }
@@ -274,27 +310,79 @@ SELECT ?dish ?c ?cuisine ?national (SAMPLE(?img) AS ?image) (SAMPLE(?links) AS ?
     ?dish wdt:P31 ?bad .
   }
   OPTIONAL { ?dish wdt:P495 ?origin }
+  OPTIONAL { ?dish wdt:P2012 ?cui }
   OPTIONAL { ?dish rdfs:label ?les FILTER(LANG(?les) = "es") }
   OPTIONAL { ?dish rdfs:label ?len FILTER(LANG(?len) = "en") }
   OPTIONAL { ?dish rdfs:label ?lmul FILTER(LANG(?lmul) = "mul") }
+  OPTIONAL { ?wes schema:about ?dish ; schema:isPartOf <https://es.wikipedia.org/> }
+  OPTIONAL { ?wen schema:about ?dish ; schema:isPartOf <https://en.wikipedia.org/> }
 } GROUP BY ?dish ?c ?cuisine ?national`, `dishes ${batch[0].iso2}-${batch.at(-1).iso2}`);
     for (const b of rows) {
       const iso = v(b, 'c') ? qToIso.get(qid(v(b, 'c'))) : byCuisine.get(qid(v(b, 'cuisine')));
       if (!iso) continue;
       const label = bi(v(b, 'les'), v(b, 'len'), v(b, 'lmul'));
       if (!label) continue;
+      const id = qid(v(b, 'dish'));
+      if (overrideOf(iso).exclude.has(id)) { bump(filterStats.excluded, iso); continue; }
       const national = v(b, 'national') === 'true';
       const origins = (v(b, 'origins') || '').split(' ').filter(Boolean).map(qid);
+      const cuisines = (v(b, 'cuisines') || '').split(' ').filter(Boolean).map(qid);
       const countryQ = matched.find((c) => c.iso2 === iso).q;
       const local = origins.includes(countryQ);
-      if (!national && origins.length && !local) continue;
+      if (cuisines.includes(TEX_MEX)) { bump(filterStats.texmex, iso); continue; }
+      if (origins.length && !local) { bump(filterStats.origin, iso); continue; }
+      if (!origins.length && !national && !cuisines.includes(cuisine.get(iso)?.qid)) { bump(filterStats.noCuisine, iso); continue; }
       const list = dishes.get(iso) || [];
-      const id = qid(v(b, 'dish'));
       const prev = list.find((d) => d.qid === id);
       if (prev) { prev.national ||= national; continue; }
-      list.push({ qid: id, label, image: commonsName(v(b, 'image')), national, local, links: Number(v(b, 'links')) });
+      const wiki = {};
+      if (v(b, 'wes')) wiki.es = v(b, 'wes');
+      if (v(b, 'wen')) wiki.en = v(b, 'wen');
+      list.push({ qid: id, label, image: commonsName(v(b, 'image')), wiki, national, local, links: Number(v(b, 'links')) });
       dishes.set(iso, list);
     }
+  }
+}
+
+// 4b. Curated dishes from data/overrides/dishes.json: one query for every
+//     included item, then placed first per country in the file's order.
+
+const curated = new Map(); // iso -> [{qid,label,image,wiki,region}]
+{
+  const wanted = new Map(); // qid -> fetched row
+  for (const iso of Object.keys(overrides)) for (const { qid: q } of overrideOf(iso).include) wanted.set(q, null);
+  if (wanted.size) {
+    const rows = await sparql(`
+SELECT ?dish (SAMPLE(?img) AS ?image) (SAMPLE(?les) AS ?les) (SAMPLE(?len) AS ?len) (SAMPLE(?lmul) AS ?lmul)
+       (SAMPLE(?wes) AS ?wes) (SAMPLE(?wen) AS ?wen) WHERE {
+  VALUES ?dish { ${[...wanted.keys()].map(wd).join(' ')} }
+  OPTIONAL { ?dish wdt:P18 ?img }
+  OPTIONAL { ?dish rdfs:label ?les FILTER(LANG(?les) = "es") }
+  OPTIONAL { ?dish rdfs:label ?len FILTER(LANG(?len) = "en") }
+  OPTIONAL { ?dish rdfs:label ?lmul FILTER(LANG(?lmul) = "mul") }
+  OPTIONAL { ?wes schema:about ?dish ; schema:isPartOf <https://es.wikipedia.org/> }
+  OPTIONAL { ?wen schema:about ?dish ; schema:isPartOf <https://en.wikipedia.org/> }
+} GROUP BY ?dish`, 'curated dishes');
+    for (const b of rows) wanted.set(qid(v(b, 'dish')), b);
+  }
+  for (const iso of Object.keys(overrides)) {
+    if (!matched.some((c) => c.iso2 === iso)) { console.warn(`overrides: ${iso} is not a country in facts.json, skipped`); continue; }
+    const list = [];
+    for (const { qid: q, region } of overrideOf(iso).include) {
+      const b = wanted.get(q);
+      const label = b && bi(v(b, 'les'), v(b, 'len'), v(b, 'lmul'));
+      if (!label) { console.warn(`overrides ${iso}: ${q} is not a Wikidata item with a label, skipped`); continue; }
+      const image = commonsName(v(b, 'image'));
+      if (!image) { console.warn(`overrides ${iso}: ${q} (${label.es}) has no photo (P18), skipped`); continue; }
+      if (list.some((d) => d.qid === q)) continue;
+      const wiki = {};
+      if (v(b, 'wes')) wiki.es = v(b, 'wes');
+      if (v(b, 'wen')) wiki.en = v(b, 'wen');
+      const d = { qid: q, label, image, wiki };
+      if (region && (region.es || region.en)) d.region = { es: region.es || region.en, en: region.en || region.es };
+      list.push(d);
+    }
+    curated.set(iso, list);
   }
 }
 
@@ -381,11 +469,11 @@ const out = {
     images: 'Each image is a Wikimedia Commons file with its own license; show the author and license from the file page. Thumbnail: https://commons.wikimedia.org/wiki/Special:FilePath/<image>?width=640',
     text: 'desc and wiki links point to Wikipedia (CC BY-SA 4.0).',
   },
-  notes: 'heritage = UNESCO World Heritage sites (P1435=Q9259 with a P757 id) whose P17 is the country, capped at 25, shared=n when the site spans n countries; dishes = items filed under the national cuisine (P2012) with a photo and no foreign country of origin, ranked by sitelinks, national=true when tagged Q1391582; anthem = P85; demonym = P1549.',
+  notes: 'heritage = UNESCO World Heritage sites (P1435=Q9259 with a P757 id) whose P17 is the country, capped at 25, shared=n when the site spans n countries; dishes = items filed under the national cuisine (P2012) with a photo and no foreign country of origin, not filed under Tex-Mex (Q29359), ranked by sitelinks, national=true when tagged Q1391582; curated=true (and region) on dishes a person picked in data/overrides/dishes.json, which go first; anthem = P85; demonym = P1549.',
   countries: {},
 };
 
-const stats = { withHeritage: 0, sites: 0, sitesWithImage: 0, sitesWithLl: 0, withDishes: 0, dishes: 0, withCuisine: 0, withAnthem: 0, withDemonym: 0, capped: [] };
+const stats = { withHeritage: 0, sites: 0, sitesWithImage: 0, sitesWithLl: 0, withDishes: 0, dishes: 0, withCuisine: 0, withAnthem: 0, withDemonym: 0, capped: [], curated: [] };
 
 for (const c of countries) {
   const sites = (heritage.get(c.iso2) || [])
@@ -395,10 +483,14 @@ for (const c of countries) {
       || (b.links - a.links));
   if (sites.length > MAX_HERITAGE) stats.capped.push(`${c.iso2}:${sites.length}`);
   const kept = sites.slice(0, MAX_HERITAGE).map(({ links, shared, ...s }) => (shared > 1 ? { ...s, shared } : s));
-  const ds = (dishes.get(c.iso2) || [])
+  const picked = curated.get(c.iso2) || [];
+  const pickedIds = new Set(picked.map((d) => d.qid));
+  const ds = picked.map((d) => ({ ...d, curated: true })).concat((dishes.get(c.iso2) || [])
+    .filter((d) => !pickedIds.has(d.qid))
     .sort((a, b) => (Number(b.national) - Number(a.national)) || (Number(b.local) - Number(a.local)) || (b.links - a.links))
-    .slice(0, MAX_DISHES)
-    .map(({ links, national, local, ...d }) => (national ? { ...d, national: true } : d));
+    .slice(0, Math.max(0, MAX_DISHES - picked.length))
+    .map(({ links, national, local, ...d }) => (national ? { ...d, national: true } : d)));
+  if (picked.length) stats.curated.push(`${c.iso2}:${picked.length}`);
   const cu = cuisine.get(c.iso2);
   const entry = {
     qid: c.q,
@@ -493,6 +585,9 @@ await writeFile(OUT, JSON.stringify(out));
 const { size } = await stat(OUT);
 console.log(`wrote ${OUT} (${(size / 1024).toFixed(0)} KB)`);
 console.log(`heritage: ${stats.withHeritage} countries, ${stats.sites} sites, ${stats.sitesWithImage} with image, ${stats.sitesWithLl} with coordinates; capped at ${MAX_HERITAGE}: ${stats.capped.join(' ') || 'none'}`);
-console.log(`cuisine: ${stats.withCuisine} countries; dishes: ${stats.withDishes} countries, ${stats.dishes} dishes`);
+console.log(`cuisine: ${stats.withCuisine} countries; dishes: ${stats.withDishes} countries, ${stats.dishes} dishes; curated: ${stats.curated.join(' ') || 'none'}`);
+const sum = (m) => [...m.values()].reduce((a, b) => a + b, 0);
+const top = (m) => [...m].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => `${k}:${n}`).join(' ');
+console.log(`dish filters: Tex-Mex ${sum(filterStats.texmex)} (${top(filterStats.texmex) || 'none'}); foreign origin ${sum(filterStats.origin)} (${top(filterStats.origin) || 'none'}); no origin and not this cuisine ${sum(filterStats.noCuisine)} (${top(filterStats.noCuisine) || 'none'}); excluded by override ${sum(filterStats.excluded)} (${top(filterStats.excluded) || 'none'})`);
 console.log(`anthem: ${stats.withAnthem} countries; demonym: ${stats.withDemonym} countries`);
 console.log(`local labels: ${localStats.langs.size} languages, ${localStats.queries} label queries; dishes ${localStats.dishes} (${localStats.dishesDiffer} differ from es/en), cuisines ${localStats.cuisines}, sites ${localStats.sites}`);
