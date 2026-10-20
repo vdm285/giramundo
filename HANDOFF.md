@@ -50,6 +50,12 @@ The state of the code after the rebuild. `docs/VISION.md` is the plan; this file
 3. Create a Google Maps Embed API key restricted to `https://vdm285.github.io/*` and set it as the `VITE_MAPS_EMBED_KEY` repository variable (already read by the workflow).
 4. Rename the local folder to `D:\_GitHub\giramundo` to match the repository (one `Rename-Item` in PowerShell with nothing open in the folder).
 
+## 2026-10-20
+
+- Chrome diagnosis (done through the Chrome extension): WebGL runs on "Microsoft Basic Render Driver", i.e. software rendering, with a device pixel ratio of 3 in Victor's Chrome window. That, not the app, is why Chrome lags in every mode. Owner fix: enable graphics acceleration in `chrome://settings/system`, relaunch, confirm in `chrome://gpu`; update the NVIDIA driver; set Chrome to High performance in Windows Graphics settings.
+- Flat map: static layer cached in an offscreen canvas (`renderStatic` in `src/flat/map.js`); panning is cheap now.
+- Wireframe mode and the `wireframe` branch: see `docs/WIREFRAME.md`.
+
 ## Evening of 2026-10-16, in short
 
 - Victor's hands-on verdict: the Simple globe is perfectly smooth in Chrome and in the desktop pane; Full and Atlas lag in both. Technical review pending (remind him about `chrome://gpu`). Candidate next steps: default to Simple on first visit, or cut the Full shader's cost (fewer texture reads, skip the 4-tap id blend when far), then re-test.
