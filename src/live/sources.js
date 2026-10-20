@@ -223,12 +223,24 @@ export async function loadNews(iso2, base) {
   return getJson(`${base}data/news/${iso2.toLowerCase()}.json`, { ttlMs: 30 * 60e3 });
 }
 
+// Videos come from three keyless-or-free sources, merged: the curated seed
+// (hand-verified), the Data API output when the owner has a key, and the
+// channel RSS "walks" collected at deploy time. De-duplicated by id.
 export async function loadVideos(iso2, base, seed) {
   if (!iso2) return null;
-  const file = await getJson(`${base}data/videos/${iso2.toLowerCase()}.json`, { ttlMs: Infinity });
-  if (file?.items?.length) return file;
-  const items = seed?.countries?.[iso2] || seed?.[iso2] || null;
-  return items ? { iso2, items } : null;
+  const low = iso2.toLowerCase();
+  const [file, walks] = await Promise.all([
+    getJson(`${base}data/videos/${low}.json`, { ttlMs: Infinity }),
+    getJson(`${base}data/walks/${low}.json`, { ttlMs: Infinity }),
+  ]);
+  const seen = new Set();
+  const items = [];
+  for (const v of [...(file?.items || []), ...(seed?.countries?.[iso2] || seed?.[iso2] || []), ...(walks?.items || [])]) {
+    if (!v?.id || seen.has(v.id)) continue;
+    seen.add(v.id);
+    items.push(v);
+  }
+  return items.length ? { iso2, items } : null;
 }
 
 export async function youtubeInfo(id) {

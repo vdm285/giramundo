@@ -43,6 +43,9 @@ jobs:
         continue-on-error: true
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      # Keyless walking-tour videos from YouTube channel RSS feeds (public/data/walks/, gitignored).
+      - run: npm run walks
+        continue-on-error: true
       - run: npm run build
         env:
           VITE_BASE: /giramundo/

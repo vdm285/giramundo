@@ -177,13 +177,23 @@ export function renderWiki(m, key) {
       <p class="links"><a href=${wikiSearch(lang, query)} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a></p>
       ${dishList(dishes, lang)}`;
   }
+  // Media first; the paragraph waits behind "Leer" (optional, never gone).
+  const open = Boolean(m.readOpen?.[key]);
+  const fold = html`
+    <div class="fold">
+      <button aria-expanded=${open} @click=${() => m.on('read', key)}>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        ${open ? t(lang, 'readLess') : `${t(lang, 'read')}${page.description ? ` · ${page.description}` : ''}`}
+      </button>
+      ${open ? html`
+        ${page.fallbackLang ? html`<p class="small muted" style="margin-top:8px">${t(lang, page.fallbackLang === 'en' ? 'fromEnglish' : 'fromSpanish')}</p>` : nothing}
+        <p class="prose">${sentences(page.extract, 900)}</p>
+        <p class="links">${page.url ? html`<a href=${page.url} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a>` : nothing}</p>` : nothing}
+    </div>`;
   return html`
-    ${page.description ? html`<p class="small muted" style="text-transform:uppercase;letter-spacing:.06em;font-weight:600">${page.description}</p>` : nothing}
-    ${page.fallbackLang ? html`<p class="small muted">${t(lang, page.fallbackLang === 'en' ? 'fromEnglish' : 'fromSpanish')}</p>` : nothing}
-    <p class="prose">${sentences(page.extract, 900)}</p>
-    <p class="links">${page.url ? html`<a href=${page.url} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a>` : nothing}</p>
-    ${dishList(dishes, lang)}
-    ${key === 'cultura' ? renderCulture(m) : nothing}`;
+    ${key === 'comida' ? dishList(dishes, lang) : nothing}
+    ${key === 'cultura' ? renderCulture(m) : nothing}
+    ${fold}`;
 }
 
 // Anthem, languages and notable people from Wikidata (public/data/culture.json).
@@ -203,8 +213,15 @@ function renderCulture(m) {
         <p class="small muted"><a href=${commonsPage(anthem.audio)} target="_blank" rel="noreferrer">Wikimedia Commons</a> · ${t(lang, 'anthemNote')}</p>` : nothing}` : nothing}
     ${langs.length ? html`
       <h3>${t(lang, 'languages')}</h3>
-      <div class="chips">${langs.map((l) => html`<span class="chip" title=${l.speakers ? `${nf(l.speakers)} ${t(lang, 'speakers')}` : ''}>${l.label?.[lang] || l.label?.en}${l.speakers ? html` <small class="muted">· ${nf(l.speakers)}</small>` : nothing}</span>`)}</div>
-      <p class="small muted">${t(lang, 'languagesNote')}</p>` : nothing}
+      <div class="chips">${langs.map((l) => {
+        const station = m.stationFor?.(l);
+        const current = station && m.radio?.station?.id === station.id;
+        return html`<span class="chip hear" aria-current=${Boolean(current)} title=${station ? `${t(lang, 'hearLangTitle')}: ${station.name}` : (l.speakers ? `${nf(l.speakers)} ${t(lang, 'speakers')}` : '')}>
+          ${station ? html`<button class="play" aria-label=${t(lang, 'hearLang')} @click=${() => m.on(current ? 'radio-toggle' : 'radio-play', { station, iso2: m.country.iso2 })}>
+            ${current && (m.radio.status === 'playing' || m.radio.status === 'loading') ? pauseIcon : playIcon}</button>` : nothing}
+          ${l.label?.[lang] || l.label?.en}${l.speakers ? html` <small class="muted">· ${nf(l.speakers)}</small>` : nothing}</span>`;
+      })}</div>
+      <p class="small muted">${t(lang, 'languagesNote')} ${t(lang, 'hearLangTitle')}.</p>` : nothing}
     ${people.length ? html`
       <h3>${t(lang, 'people')}</h3>
       <div class="people">${people.map((p) => html`
@@ -223,12 +240,14 @@ function dishList(dishes, lang) {
     <h3>${lang === 'es' ? 'Platos típicos' : 'Typical dishes'}</h3>
     <div class="places">${dishes.slice(0, 6).map((d) => {
       const name = d.label?.[lang] || d.label?.en || '';
-      const q = lang === 'es' ? `${name} receta` : `${name} recipe`;
+      const local = d.label?.local && d.label.local !== name ? d.label.local : '';
+      // Search with the local name too: recipes by locals, for locals.
+      const q = local ? `${local} ${lang === 'es' ? 'receta' : 'recipe'}` : (lang === 'es' ? `${name} receta` : `${name} recipe`);
       return html`
       <div class="place ${d.image ? '' : 'noimg'}" style="cursor:default">
         <a class="yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`} target="_blank" rel="noreferrer" title=${t(lang, 'ytVideo')}>▶ YouTube</a>
         ${d.image ? html`<img loading="lazy" src=${commonsThumb(d.image, 480)} alt="">` : nothing}
-        <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}</a>
+        <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}${local ? html`<small>${local}</small>` : nothing}</a>
       </div>`;
     })}</div>
     <p class="small muted">Wikidata · Wikimedia Commons</p>`;

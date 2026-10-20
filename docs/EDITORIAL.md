@@ -15,3 +15,5 @@ We do not promise a neutral voice. We promise that a claim can be traced.
 - Some capitals use the everyday Spanish name (Tokio, Pekín). Palestine does not show a single capital, because the sources disagree (Ramallah and East Jerusalem) and the card says so.
 - A water name after an ocean tap is labeled approximate.
 - If a text is wrong, the footer links to a GitHub issue.
+- Content is genuine and local, never synthetic. A language is heard through a real station where locals speak to locals; an anthem is a real recording from Commons; money is a scan of a real banknote; a street is a video someone actually walked. We do not generate voices, images, music or "typical" scenes with AI. AI may help summarize a long source for the reader on request (that is retrieval, and it says so), but it never stands in for the thing itself.
+- Media first, text optional. The paragraph is one tap away behind "Leer", not deleted; the numbers unfold from a one-line capsule. Optionality over clutter: nothing is forced on the reader, nothing is lost.

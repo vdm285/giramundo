@@ -52,6 +52,8 @@ The state of the code after the rebuild. `docs/VISION.md` is the plan; this file
 
 ## 2026-10-20
 
+- Media-first dossier, first pass: the facts grid became a one-line capsule with "Más datos"; the Wikipedia paragraphs sit behind a "Leer" fold (optional, never removed); Comida shows the dishes first with their local-language name and a recipe search in that name; Cultura's languages carry a play button that starts a local station in that language; the anthem plays from the hero through the shared player; a city card offers a station within 60 km when the directory has one; banknotes and coins from Commons appear as a slideshow under the capsule when `public/data/money.json` has them. Keyless walking-tour videos come from YouTube channel RSS feeds at deploy time (`npm run walks`, `public/data/walks/`, gitignored) and merge into Ver.
+- Principle written into `docs/EDITORIAL.md`: content shown to the reader is genuine and local (real recordings, real scans, real streams), never synthetic.
 - Chrome diagnosis (done through the Chrome extension): WebGL runs on "Microsoft Basic Render Driver", i.e. software rendering, with a device pixel ratio of 3 in Victor's Chrome window. That, not the app, is why Chrome lags in every mode. Owner fix: enable graphics acceleration in `chrome://settings/system`, relaunch, confirm in `chrome://gpu`; update the NVIDIA driver; set Chrome to High performance in Windows Graphics settings.
 - Flat map: static layer cached in an offscreen canvas (`renderStatic` in `src/flat/map.js`); panning is cheap now.
 - Wireframe mode and the `wireframe` branch: see `docs/WIREFRAME.md`.

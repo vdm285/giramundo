@@ -4,7 +4,38 @@
 import { html, nothing } from 'lit';
 import { SECTIONS } from '../app/router.js';
 import { t } from '../app/i18n.js';
-import { continentLabel, currencyLabel, displayCapital, formatCount, formatTime, languageNames, mainZone } from '../data/format.js';
+import { continentLabel, currencyLabel, displayCapital, formatCompact, formatCount, formatTime, languageNames, mainZone } from '../data/format.js';
+import { commonsPage, commonsThumb } from '../live/sources.js';
+
+// Real banknotes and coins from Wikimedia Commons, as a slideshow sized like
+// a bill. Hover shows the denomination, the currency and the rate.
+function renderMoney(m) {
+  const { lang, country, money, on, content } = m;
+  const code = country.currencies?.[0]?.code;
+  const cur = code ? money?.[code] : null;
+  if (!cur) return nothing;
+  const bills = cur.banknotes || [];
+  const idx = bills.length ? (m.moneyIdx || 0) % bills.length : 0;
+  const rates = content.rates;
+  const perUsd = rates?.usd?.[code];
+  const fmt = (n) => new Intl.NumberFormat(lang === 'es' ? 'es-MX' : 'en-US', { maximumSignificantDigits: 4 }).format(n);
+  const rate = perUsd ? `1 USD = ${fmt(perUsd)} ${code}${code !== 'MXN' && rates.usd.MXN ? ` · 1 ${code} = ${fmt(rates.usd.MXN / perUsd)} MXN` : ''}` : '';
+  const name = cur.name?.[lang] || cur.name?.en || code;
+  if (!bills.length) {
+    return html`<p class="small muted" style="margin:10px 0 0">${name} · ${code}${rate ? ` · ${rate}` : ''}</p>`;
+  }
+  const bill = bills[idx];
+  return html`
+    <div class="money" tabindex="0" aria-label=${`${t(lang, 'moneyBills')}: ${name}`}>
+      ${bills.map((b, i) => html`<img class=${i === idx ? 'on' : ''} src=${commonsThumb(b.file, 900)} alt=${`${b.denomination || ''} ${name}`} loading=${i === idx ? 'eager' : 'lazy'}>`)}
+      ${bills.length > 1 ? html`<div class="dots">${bills.map((_, i) => html`<i class=${i === idx ? 'on' : ''}></i>`)}</div>
+        <button class="step l" aria-label="prev" @click=${() => on('money-step', -1)}>‹</button>
+        <button class="step r" aria-label="next" @click=${() => on('money-step', 1)}>›</button>` : nothing}
+      <div class="label"><span><b>${bill.denomination ? `${bill.denomination} ` : ''}${name}</b>${rate ? html`<br>${rate}` : nothing}</span>
+        <a class="credit" style="position:static;background:none;padding:0" href=${commonsPage(bill.file)} target="_blank" rel="noreferrer">${bill.license || 'Commons'}</a></div>
+    </div>
+    ${cur.coins?.length ? html`<div class="coins">${cur.coins.slice(0, 8).map((c) => html`<a href=${commonsPage(c.file)} target="_blank" rel="noreferrer" title=${`${c.denomination || ''} · ${c.license || ''}`}><img loading="lazy" src=${commonsThumb(c.file, 160)} alt=""></a>`)}</div>` : nothing}`;
+}
 import { disputeNote } from '../data/disputed.js';
 import { haversineKm } from '../geo/math.js';
 import { renderAhora, renderDatos, renderLugares, renderVer, renderWiki } from './sections.js';
@@ -71,6 +102,11 @@ export function renderDossier(m) {
       <div class="hero-tools">
         <button title=${t(lang, 'collapse')} aria-label=${t(lang, 'collapse')} @click=${() => on('collapse')}>${icons.collapse}</button>
         <button title=${t(lang, 'share')} aria-label=${t(lang, 'share')} @click=${() => on('share')}>${icons.share}</button>
+        ${m.culture?.anthem?.audio ? html`<button class="anthem" aria-current=${m.radio?.station?.id === `anthem-${country.iso2}`} title=${t(lang, 'anthemPlay')} @click=${() => on('anthem')}>
+          ${m.radio?.station?.id === `anthem-${country.iso2}` && (m.radio.status === 'playing' || m.radio.status === 'loading')
+            ? html`<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>`
+            : html`<svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z"/></svg>`}
+          ${t(lang, 'anthem')}</button>` : nothing}
         <button title=${t(lang, m.wide ? 'shrink' : 'expand')} aria-label=${t(lang, m.wide ? 'shrink' : 'expand')} aria-pressed=${Boolean(m.wide)} @click=${() => on('wide')}>
           ${m.wide
             ? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 20v-5h5M4 15h5v5M20 9h-5V4"/></svg>`
@@ -94,8 +130,15 @@ export function renderDossier(m) {
       ${!country.onMap && country.iso2 ? html`<div class="note"><p>${t(lang, 'small')}</p></div>` : nothing}
       ${dispute ? html`<aside class="note"><strong>${t(lang, 'disputed')}</strong><p>${dispute}</p></aside>` : nothing}
       ${section === 'historia' ? html`
-        <div class="facts">${facts.map(([k, v]) => html`<div><span>${k}</span><strong title=${v}>${v}</strong></div>`)}</div>
-        ${km != null && country.iso2 !== 'MX' ? html`<p class="small muted">${formatCount(km, lang)} ${t(lang, 'kmFrom')} ${t(lang, 'fromHome')}</p>` : nothing}` : nothing}
+        <div class="capsule">
+          ${capital && country.iso2 !== 'PS' ? html`<span><b>${capital}</b></span>` : nothing}
+          ${country.population ? html`<span>${formatCompact(country.population, lang)} ${lang === 'es' ? 'personas' : 'people'}</span>` : nothing}
+          ${country.languages?.length ? html`<span>${languageNames(country.languages.slice(0, 2), lang).join(', ')}</span>` : nothing}
+          ${km != null && country.iso2 !== 'MX' ? html`<span class="muted">${formatCount(km, lang)} ${t(lang, 'kmFrom')} ${t(lang, 'fromHome')}</span>` : nothing}
+          <button class="more" aria-expanded=${Boolean(m.factsOpen)} @click=${() => on('facts')}>${t(lang, m.factsOpen ? 'factsLess' : 'factsMore')}</button>
+        </div>
+        ${m.factsOpen ? html`<div class="facts">${facts.map(([k, v]) => html`<div><span>${k}</span><strong title=${v}>${v}</strong></div>`)}</div>` : nothing}
+        ${renderMoney(m)}` : nothing}
       ${body}
       <div class="chips" style="margin-top:18px">
         <span>${neighbors.length ? t(lang, 'neighbors') : t(lang, 'nearest')}</span>

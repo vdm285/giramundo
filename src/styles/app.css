@@ -287,6 +287,43 @@ a.chip { text-decoration: none; }
 .place-detail { margin: 12px 0; padding: 12px; background: rgba(255, 255, 255, 0.55); border-radius: 14px; }
 .place-detail img { width: 100%; border-radius: 10px; max-height: 240px; object-fit: cover; }
 
+/* Media-first dossier: compact facts, folded text, money, hear-it */
+.capsule { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 12px 0 4px; color: var(--ink-2); font-size: 0.95rem; }
+.capsule b { color: var(--ink); font-weight: 600; }
+.capsule .more { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.55); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: 0.8rem; font-weight: 700; }
+.capsule .more[aria-expanded="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.fold { margin: 10px 0 4px; }
+.fold > button {
+  border: 1px solid var(--line); background: rgba(255, 255, 255, 0.55); color: var(--ink);
+  border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;
+}
+.fold > button[aria-expanded="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.fold .prose { margin-top: 10px; }
+.money { position: relative; margin: 12px 0 4px; border-radius: 12px; overflow: hidden; background: var(--paper-3); aspect-ratio: 2.2 / 1; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); }
+.money img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 700ms; }
+.money img.on { opacity: 1; }
+.money .label {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 12px 8px; color: #fff; font-size: 0.86rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent); opacity: 0; transition: opacity 250ms; display: flex; justify-content: space-between; gap: 8px; align-items: flex-end;
+}
+.money:hover .label, .money:focus-within .label { opacity: 1; }
+.money .label b { font-weight: 700; }
+.money .dots { position: absolute; top: 8px; right: 10px; display: flex; gap: 4px; }
+.money .dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.5); }
+.money .dots i.on { background: #fff; }
+.money button.step { position: absolute; top: 50%; transform: translateY(-50%); border: 0; background: rgba(0, 0, 0, 0.35); color: #fff; width: 30px; height: 30px; border-radius: 50%; opacity: 0; }
+.money:hover button.step { opacity: 1; }
+.money button.step.l { left: 8px; }
+.money button.step.r { right: 8px; }
+.money-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 0.82rem; color: var(--muted); margin: 4px 0 0; }
+.coins { display: flex; gap: 8px; overflow-x: auto; padding: 6px 0; scrollbar-width: thin; }
+.coins img { width: 64px; height: 64px; object-fit: cover; border-radius: 50%; flex: none; background: var(--paper-3); }
+.hear { display: inline-flex; align-items: center; gap: 6px; }
+.hear .play { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--ink); color: var(--paper); display: grid; place-items: center; flex: none; }
+.hear .play svg { width: 12px; height: 12px; }
+.hear[aria-current="true"] .play { background: var(--coral); }
+.hero-tools .anthem { width: auto; border-radius: 999px; padding: 0 12px 0 8px; gap: 6px; font-size: 0.82rem; font-weight: 700; }
+
 /* Culture */
 .people { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .person { text-decoration: none; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }

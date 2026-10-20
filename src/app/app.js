@@ -8,6 +8,7 @@ import { searchCountries } from '../data/search.js';
 import { ALIAS_NOTES, norm } from '../data/aliases.js';
 import { formatTime } from '../data/format.js';
 import { nameWater } from '../geo/oceans.js';
+import { haversineKm } from '../geo/math.js';
 // The 3D engine is loaded on demand (see mountSurface), so the flat map
 // path never downloads Three.js.
 import { createFlatMap } from '../flat/map.js';
@@ -171,6 +172,39 @@ function flyToCountry(country, turns = 0) {
   const degPerPx = 57.3 / Math.max(80, radiusPx);
   const shift = (covered / 2) * degPerPx;
   surface.flyTo(country.ll[0], country.ll[1] + shift, dist, { turns });
+}
+
+// ---------- hear it: real stations for a language or a city ----------
+
+const LANG_WORDS = {
+  es: ['spanish', 'español', 'espanol', 'castellano'], en: ['english'], fr: ['french', 'français', 'francais'], pt: ['portuguese', 'português'],
+  de: ['german', 'deutsch'], it: ['italian', 'italiano'], ja: ['japanese'], ko: ['korean'], zh: ['chinese', 'mandarin', 'cantonese'],
+  ar: ['arabic'], ru: ['russian'], hi: ['hindi'], tr: ['turkish'], nl: ['dutch'], pl: ['polish'], el: ['greek'], he: ['hebrew'],
+  fa: ['persian', 'farsi'], th: ['thai'], vi: ['vietnamese'], id: ['indonesian'], ms: ['malay'], sw: ['swahili'], uk: ['ukrainian'],
+  cs: ['czech'], hu: ['hungarian'], ro: ['romanian'], sv: ['swedish'], no: ['norwegian'], da: ['danish'], fi: ['finnish'],
+  ca: ['catalan'], eu: ['basque'], gl: ['galician'], qu: ['quechua'], gn: ['guaraní', 'guarani'], nah: ['náhuatl', 'nahuatl'], bn: ['bengali'], ur: ['urdu'], ta: ['tamil'],
+};
+
+// The first station of the country whose language field matches; the list
+// is already ordered toward local talk and culture.
+function stationForLanguage(iso2, language) {
+  const list = iso2 ? world.radio?.[iso2] : null;
+  if (!list?.length || !language) return null;
+  const words = [...(LANG_WORDS[language.code] || []), String(language.label?.en || '').toLowerCase()].filter(Boolean);
+  return list.find((s) => s.lang && words.some((w) => s.lang.toLowerCase().includes(w))) || null;
+}
+
+function nearestStation(iso2, ll) {
+  const list = iso2 ? world.radio?.[iso2] : null;
+  if (!list?.length || !ll) return null;
+  let best = null;
+  let bestKm = 60;
+  for (const s of list) {
+    if (!s.ll) continue;
+    const km = haversineKm({ lat: ll[0], lon: ll[1] }, { lat: s.ll[0], lon: s.ll[1] });
+    if (km < bestKm) { best = s; bestKm = km; }
+  }
+  return best;
 }
 
 // ---------- cities ----------
@@ -480,6 +514,30 @@ async function on(action, payload) {
       store.set({ wide: !s.wide, collapsed: false });
       writeSetting('wide', !s.wide);
       break;
+    case 'facts': store.set({ factsOpen: !s.factsOpen }); break;
+    case 'read': store.set({ readOpen: { ...s.readOpen, [payload]: !s.readOpen?.[payload] } }); break;
+    case 'money-step': {
+      const code = countryOf(s.id)?.currencies?.[0]?.code;
+      const n = world.money?.[code]?.banknotes?.length || 1;
+      store.set({ moneyIdx: (s.moneyIdx + payload + n) % n, moneyHold: Date.now() });
+      break;
+    }
+    case 'anthem': {
+      // The anthem plays through the same player as the radio: a real
+      // recording from Commons, never a synthetic voice.
+      const c = countryOf(s.id);
+      const anthem = c?.iso2 ? world.culture?.[c.iso2]?.anthem : null;
+      if (!anthem?.audio) break;
+      const id = `anthem-${c.iso2}`;
+      if (s.radio?.station?.id === id) { radio.toggle(); break; }
+      radio.play({ id, name: anthem.label?.[s.lang] || anthem.label?.en || 'Anthem', url: live.commonsThumb(anthem.audio).replace(/\?width=\d+$/, '') }, c.iso2);
+      break;
+    }
+    case 'hear-city': {
+      const station = payload;
+      if (station) radio.play(station, s.id);
+      break;
+    }
     case 'city-close': closeCity(); break;
     case 'radio-play': radio.play(payload.station, payload.iso2); break;
     case 'radio-toggle': radio.toggle(); break;
@@ -613,8 +671,8 @@ function shell(s) {
         ${s.game
           ? renderGame({ lang: s.lang, game: s.game, world, on, base })
           : s.city
-            ? renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base })
-            : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, on, base, feature: featureOf(country) })}
+            ? renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base, radio: s.radio, cityStation: nearestStation(country?.iso2, s.city.ll) })
+            : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, money: world.money, on, base, feature: featureOf(country), stationFor: (l) => stationForLanguage(country?.iso2, l) })}
       </div>
     </aside>
     <dialog id="about">
@@ -777,6 +835,9 @@ export async function boot({ wire = false } = {}) {
     playmenu: false,
     city: null,
     wide: readSetting('wide', false),
+    factsOpen: false,
+    readOpen: {},
+    moneyIdx: 0,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
@@ -861,6 +922,15 @@ export async function boot({ wire = false } = {}) {
   }, 15000);
   setInterval(syncMarkers, 900);
   setInterval(() => { if (store.get().tour?.playing) store.set({ tick: Date.now() }); }, 400);
+  // Banknote slideshow: one bill every 4 s, paused a while after a manual step.
+  setInterval(() => {
+    const s = store.get();
+    if (s.collapsed || s.game || s.city || document.visibilityState !== 'visible') return;
+    if (s.moneyHold && Date.now() - s.moneyHold < 8000) return;
+    const code = countryOf(s.id)?.currencies?.[0]?.code;
+    const n = world.money?.[code]?.banknotes?.length || 0;
+    if (n > 1 && s.section === 'historia') store.set({ moneyIdx: (s.moneyIdx + 1) % n });
+  }, 4000);
   // Performance readout, refreshed only while the settings dialog is open.
   setInterval(() => {
     if (!document.getElementById('settings')?.open || !surface) return;

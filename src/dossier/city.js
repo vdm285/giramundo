@@ -45,6 +45,14 @@ export function renderCity(m) {
         ${ll ? html`<div><span>${t(lang, 'cityCoords')}</span><strong>${ll[0].toFixed(2)}, ${ll[1].toFixed(2)}</strong></div>` : nothing}
       </div>
       ${city.pop ? html`<p class="small muted">${t(lang, 'cityPopNote')}</p>` : nothing}
+      ${m.cityStation ? (() => {
+        const current = m.radio?.station?.id === m.cityStation.id;
+        const busy = current && (m.radio.status === 'playing' || m.radio.status === 'loading');
+        return html`<p><span class="chip hear" aria-current=${Boolean(current)}>
+          <button class="play" aria-label=${t(lang, 'hearCity')} @click=${() => on(current ? 'radio-toggle' : 'hear-city', m.cityStation)}>
+            ${busy ? html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>` : html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`}</button>
+          ${t(lang, 'hearCity')}: ${m.cityStation.name.split(/\s[-–|]\s/)[0]}</span></p>`;
+      })() : nothing}
       ${summary === undefined ? html`<div class="skel"></div><div class="skel short"></div>`
         : summary?.extract ? html`
           ${summary.description ? html`<p class="small muted" style="text-transform:uppercase;letter-spacing:.06em;font-weight:600">${summary.description}</p>` : nothing}
