@@ -782,6 +782,17 @@ async function on(action, payload) {
       if (s.id) { store.set({ home: s.id }); writeSetting('home', s.id); }
       break;
     case 'focus': { const c = countryOf(s.id); if (c && hasAdmin(c)) enterFocus(c); break; }
+    // The space ladder, one discrete step at a time. Above Earth the levels
+    // are placeholders (one real photograph each); below, the app's own views.
+    case 'level': {
+      const c = countryOf(s.id);
+      if (payload === 'universe' || payload === 'galaxy' || payload === 'solar') { store.set({ cosmos: payload }); break; }
+      if (s.cosmos) store.set({ cosmos: null });
+      if (payload === 'earth') { if (s.focus) exitFocus(); store.set({ collapsed: true }); surface?.setSpin(s.spin && !reduced); break; }
+      if (payload === 'country') { if (s.focus) exitFocus(); else { store.set({ collapsed: false }); if (c) flyToCountry(c); } break; }
+      if (payload === 'state' && c && hasAdmin(c) && !s.focus) enterFocus(c);
+      break;
+    }
     case 'focus-exit': exitFocus(); break;
     case 'radio-list': store.set({ radioOpen: !s.radioOpen }); break;
     case 'radio-shuffle': {
@@ -835,6 +846,27 @@ function shell(s) {
       </div>
     </form>
     <button class="corner gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
+    ${(() => {
+      // The rail: one dot per level, the current one lit, names on hover.
+      const canState = hasAdmin(country);
+      const current = s.cosmos || (s.focus ? 'state' : (s.collapsed || !s.id) ? 'earth' : 'country');
+      const levels = [['universe', 'levelUniverse'], ['galaxy', 'levelGalaxy'], ['solar', 'levelSolar'], ['earth', 'levelEarth'], ['country', 'levelCountry'], ['state', 'levelState']];
+      return html`<nav class="rail" aria-label=${t(s.lang, 'levels')}>
+        ${levels.map(([k, label]) => html`<button class=${k === 'state' && !canState ? 'off' : ''} aria-current=${k === current} ?disabled=${k === 'state' && !canState} @click=${() => on('level', k)}><i></i><span>${t(s.lang, label)}</span></button>`)}
+      </nav>`;
+    })()}
+    ${s.cosmos ? (() => {
+      const pics = {
+        universe: { file: 'Hubble ultra deep field high rez edit1.jpg', credit: 'NASA, ESA · public domain', text: 'cosmosUniverse' },
+        galaxy: { file: 'Milky Way Arch.jpg', credit: 'Bruno Gilli / ESO · CC BY 4.0', text: 'cosmosGalaxy' },
+        solar: { file: 'Planets2013.jpg', credit: 'Wikimedia Commons · CC BY-SA 3.0', text: 'cosmosSolar' },
+      };
+      const pic = pics[s.cosmos];
+      return html`<div class="cosmos" @click=${() => on('level', 'earth')}>
+        <img src=${live.commonsThumb(pic.file, 1800)} alt="">
+        <div class="cap"><b>${t(s.lang, `level${s.cosmos[0].toUpperCase()}${s.cosmos.slice(1)}`)}</b><span>${t(s.lang, pic.text)}</span><small>${t(s.lang, 'cosmosHint')} · <a href=${live.commonsPage(pic.file)} target="_blank" rel="noreferrer" @click=${(e) => e.stopPropagation()}>${pic.credit}</a></small></div>
+      </div>`;
+    })() : nothing}
     ${s.collapsed && country && !s.focus ? html`<button class="reopen" @click=${() => on('collapse')} aria-label=${t(s.lang, 'expand')}>${country.flag ? html`<img alt="" src=${base + country.flag}>` : nothing}${country.name[s.lang] || country.name.en}</button>` : nothing}
     ${s.focus && country ? html`
       <div class="crumb" aria-label="Nivel">
@@ -1098,6 +1130,8 @@ export async function boot({ wire = false } = {}) {
     tick4: 0,
     radioPick: 0,
     radioOpen: false,
+    // The levels above Earth (placeholders for the space ladder): null, 'solar', 'galaxy', 'universe'.
+    cosmos: null,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
@@ -1127,6 +1161,7 @@ export async function boot({ wire = false } = {}) {
     document.body.classList.toggle('wide', Boolean(s.wide));
     document.body.classList.toggle('wire', WIRE);
     document.body.classList.toggle('focus', Boolean(s.focus));
+    document.body.classList.toggle('cosmos', Boolean(s.cosmos));
     render(shell(s), ui);
     mountMini();
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
@@ -1216,7 +1251,10 @@ export async function boot({ wire = false } = {}) {
   window.addEventListener('keydown', (event) => {
     const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
     if (event.key === '/' && !typing) { event.preventDefault(); document.getElementById('q').focus(); return; }
-    if (event.key === 'Escape' && store.get().focus && !typing) { exitFocus(); return; }
+    if (event.key === 'Escape' && !typing) {
+      if (store.get().cosmos) { on('level', 'earth'); return; }
+      if (store.get().focus) { exitFocus(); return; }
+    }
     if (typing || !surface) return;
     const step = 28;
     if (event.key === 'ArrowLeft') surface.control?.nudge(-step, 0);
