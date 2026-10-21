@@ -10,15 +10,38 @@
 // Queries are split in batches of countries so no single query runs close to
 // the 60 s WDQS limit, and 429 Retry-After is honored by fetchRetry.
 // Re-run: npm run places
+//   --landmarks-only      keep heritage, dishes, anthem and demonym from the
+//                         existing places.json and rebuild only `landmarks`
+//   --country=MX,US,JP    rebuild landmarks for these countries only; the
+//                         others keep the landmarks already in places.json
+//   --show=MX,US,JP       print the top 20 landmark labels of these countries
+//                         at the end (default: the --country list, else MX US JP)
 
-import { readFile, writeFile, stat } from 'node:fs/promises';
+import { readFile, writeFile, stat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { root, sparql as sparqlRaw, loadFacts, today, round } from './net.mjs';
 
 const OUT = join(root, 'public/data/places.json');
 const MAX_HERITAGE = 25;
 const MAX_DISHES = 8;
+const MAX_LANDMARKS = 40;
+const MAX_LANDMARKS_SMALL = 25; // when the file would pass MAX_BYTES
+const MAX_BYTES = 3 * 1024 * 1024;
 const BATCH = 25;
+
+const ARGS = Object.fromEntries(process.argv.slice(2).map((a) => {
+  const m = /^--([^=]+)(?:=(.*))?$/.exec(a);
+  return m ? [m[1], m[2] ?? true] : [a, true];
+}));
+const LANDMARKS_ONLY = ARGS['landmarks-only'] === true;
+const ONLY = typeof ARGS.country === 'string' ? new Set(ARGS.country.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)) : null;
+const SHOW = typeof ARGS.show === 'string' ? ARGS.show.split(',').map((s) => s.trim().toUpperCase()) : (ONLY ? [...ONLY] : ['MX', 'US', 'JP']);
+
+// The previous output: the source of everything but landmarks in
+// --landmarks-only mode, and of the landmarks of countries outside --country.
+let prev = null;
+try { prev = JSON.parse(await readFile(OUT, 'utf8')); } catch { prev = null; }
+if ((LANDMARKS_ONLY || ONLY) && !prev) throw new Error(`${OUT} does not exist yet: run once without --landmarks-only / --country`);
 
 // WDQS throttles bursts from one client (429 with Retry-After). Leave a gap
 // between queries that actually hit the network; cached ones return at once.
@@ -134,7 +157,7 @@ const valuesOf = (batch) => batch.map((c) => wd(c.q)).join(' ');
 //    flag salute under P85).
 
 const anthem = new Map();
-{
+if (!LANDMARKS_ONLY) {
   const rows = await sparql(`
 SELECT ?c ?anthem ?type ?rank ?les ?len ?lmul WHERE {
   ?c wdt:P297 ?iso .
@@ -166,7 +189,7 @@ SELECT ?c ?anthem ?type ?rank ?les ?len ?lmul WHERE {
 //    Spanish pairs (argentino / argentina) break the tie away from -a.
 
 const demonym = new Map();
-{
+if (!LANDMARKS_ONLY) {
   const rows = await sparql(`
 SELECT ?c ?demo ?gender ?number WHERE {
   ?c wdt:P297 ?iso .
@@ -256,7 +279,7 @@ const filterStats = { texmex: new Map(), origin: new Map(), noCuisine: new Map()
 const bump = (m, iso) => m.set(iso, (m.get(iso) || 0) + 1);
 
 const cuisine = new Map();
-{
+if (!LANDMARKS_ONLY) {
   const rows = await sparql(`
 SELECT ?c ?cuisine ?links ?les ?len ?lmul ?wes ?wen WHERE {
   ?c wdt:P297 ?iso .
@@ -283,7 +306,7 @@ SELECT ?c ?cuisine ?links ?les ?len ?lmul ?wes ?wen WHERE {
 }
 
 const dishes = new Map(); // iso -> [{qid,label,image,national,links}]
-{
+if (!LANDMARKS_ONLY) {
   const byCuisine = new Map([...cuisine].map(([iso, c]) => [c.qid, iso]));
   for (const batch of chunk(matched, BATCH)) {
     const cuisineValues = batch.filter((c) => cuisine.has(c.iso2)).map((c) => wd(cuisine.get(c.iso2).qid)).join(' ');
@@ -348,7 +371,7 @@ SELECT ?dish ?c ?cuisine ?national (SAMPLE(?img) AS ?image) (SAMPLE(?links) AS ?
 //     included item, then placed first per country in the file's order.
 
 const curated = new Map(); // iso -> [{qid,label,image,wiki,region}]
-{
+if (!LANDMARKS_ONLY) {
   const wanted = new Map(); // qid -> fetched row
   for (const iso of Object.keys(overrides)) for (const { qid: q } of overrideOf(iso).include) wanted.set(q, null);
   if (wanted.size) {
@@ -398,7 +421,7 @@ SELECT ?dish (SAMPLE(?img) AS ?image) (SAMPLE(?les) AS ?les) (SAMPLE(?len) AS ?l
 //    sometimes starts from the wrong side and the query hits the 60 s limit.
 
 const heritage = new Map(); // iso -> [site]
-{
+if (!LANDMARKS_ONLY) {
   for (const batch of chunk(matched, BATCH)) {
     const rows = await sparql(`
 SELECT ?site ?c (SAMPLE(?whs) AS ?whsId) (MIN(?yr) AS ?year) (SAMPLE(?links) AS ?links)
@@ -455,6 +478,308 @@ SELECT ?site ?c (SAMPLE(?whs) AS ?whsId) (MIN(?yr) AS ?year) (SAMPLE(?links) AS 
 }
 
 // ---------------------------------------------------------------------------
+// 5b. Landmarks: the places people actually visit, World Heritage or not
+//     (Chapultepec, Times Square, Shibuya, a national park, a cathedral).
+//     Two SPARQL requests per country (candidates, then their details, see
+//     below): items whose country (P17) is this one,
+//     with coordinates (P625) and a photo (P18), whose class (P31) is in the
+//     subclass tree of "tourist attraction" (Q570116) or of one of the
+//     LANDMARK_ROOTS below (park, museum, square, beach, archaeological site,
+//     church, palace...). The class trees are resolved once, server side, in
+//     a subquery (about 6,000 classes; the three widest trees, monument,
+//     memorial and fortification, are taken one level deep so statues and
+//     bunkers do not flood the list). Bridges and skyscrapers count only with
+//     25 or more sitelinks. Unlike the heritage and dish queries this one is
+//     left to the optimizer: measured on the United States, the pinned order
+//     P17 -> sitelinks -> class took 54 to 113 s, the optimizer's plan 25 s.
+//     Ranked by sitelinks, the 120 best candidates are fetched and filtered
+//     here: anything already in `heritage`, anything whose class says it is a
+//     settlement, an administrative unit, a country, an island or a river
+//     (unless it is also an archaeological site: Mitla is a town and a ruin),
+//     anything whose label is the name of a country, a state or a city, and
+//     anything excluded in data/overrides/landmarks.json. Nature (mountains,
+//     lakes, volcanoes) is capped at a quarter of the slots: every Wikipedia
+//     writes about the Great Lakes, few people go to look at them.
+//     `kind` is a short tag from the class tree, in this priority: site,
+//     monument, palace, church, temple, museum, square, market, beach, tower,
+//     bridge, park, nature, other.
+//     Overrides (data/overrides/landmarks.json, committed):
+//     { "MX": { "include": ["Q523194"], "exclude": ["Q13700"], "note": "why" } }
+//     Included items are fetched by id (they still need coordinates and a
+//     photo), ranked with the rest and never dropped by the cap; they carry
+//     curated: true. Excluded ids are dropped wherever they came from.
+
+const LANDMARK_ROOTS = {
+  site: ['Q839954', 'Q12516', 'Q109607', 'Q1081138', 'Q893745', 'Q57821'], // archaeological site, pyramid, ruins, historic site, national monument, fortification (shallow)
+  monument: ['Q4989906', 'Q5003624', 'Q179700', 'Q1779653', 'Q143912', 'Q170980'], // monument (shallow), memorial (shallow), statue, colossal statue, triumphal arch, obelisk
+  palace: ['Q16560', 'Q23413', 'Q751876'], // palace, castle, château
+  church: ['Q16970', 'Q44613'], // church building (cathedrals, basilicas, chapels), monastery
+  temple: ['Q44539', 'Q845945', 'Q32815', 'Q34627'], // temple (Buddhist, Hindu...), Shinto shrine, mosque, synagogue
+  museum: ['Q33506'],
+  square: ['Q174782'],
+  market: ['Q330284', 'Q132510'], // marketplace, market
+  beach: ['Q40080'],
+  tower: ['Q1440300', 'Q39715', 'Q12518', 'Q11303'], // observation tower, lighthouse, tower (Tokyo Tower is a lattice tower), skyscraper (25+ sitelinks)
+  bridge: ['Q12280'], // 25+ sitelinks
+  park: ['Q22698', 'Q46169', 'Q167346', 'Q1107656', 'Q194195', 'Q43501', 'Q2281788'], // park (urban park...), national park, botanical garden, garden, amusement park (theme park), zoo, public aquarium
+  nature: ['Q8502', 'Q8072', 'Q34038', 'Q35509', 'Q150784', 'Q23397', 'Q177380', 'Q83471', 'Q179049', 'Q23790', 'Q334743', 'Q187223', 'Q631305', 'Q25391'], // mountain, volcano, waterfall, cave, canyon, lake, hot spring, geyser, nature reserve, natural monument, cenote, lagoon, rock formation, dune
+  other: ['Q570116', 'Q2319498', 'Q153562', 'Q2190251'], // tourist attraction, architectural landmark, opera house, arts centre
+};
+const KIND_PRIORITY = Object.keys(LANDMARK_ROOTS);
+const SHALLOW_ROOTS = new Set(['Q4989906', 'Q5003624', 'Q57821']);
+const BIG_ONLY = ['Q12280', 'Q11303'];
+const BIG_MIN_LINKS = 25;
+const MIN_LINKS = 3;
+const CANDIDATES = 120;
+const NATURE_SHARE = 1 / 4;
+// A settlement that is also, directly, an archaeological site, ruins or a
+// pyramid stays (Mitla, Kohunlich). Being under "historic site" or "ancient
+// city" is not enough: Kamakura, Hakodate and Kumamoto are cities.
+const SITE_DIRECT = ['Q839954', 'Q109607', 'Q12516'];
+// Classes that make an item a place to live or govern, not a place to visit:
+// human settlement (direct), and the trees of administrative territorial
+// entity, city, town, village, country, island, archipelago, river.
+const NOT_A_PLACE_TREES = ['Q56061', 'Q515', 'Q3957', 'Q532', 'Q6256', 'Q23442', 'Q33837', 'Q4022'];
+const NOT_A_PLACE_DIRECT = ['Q486972'];
+
+const allRoots = Object.values(LANDMARK_ROOTS).flat();
+const deepRoots = allRoots.filter((r) => !SHALLOW_ROOTS.has(r));
+const shallowRoots = allRoots.filter((r) => SHALLOW_ROOTS.has(r));
+const classTreeSparql = `
+      {
+        VALUES ?root { ${deepRoots.map(wd).join(' ')} }
+        ?k wdt:P279* ?root .
+      } UNION {
+        VALUES ?root { ${shallowRoots.map(wd).join(' ')} }
+        ?k wdt:P279? ?root .
+      }`;
+
+const LM_OVERRIDES = join(root, 'data/overrides/landmarks.json');
+let lmOverrides = {};
+try {
+  lmOverrides = Object.fromEntries(Object.entries(JSON.parse(await readFile(LM_OVERRIDES, 'utf8'))).filter(([k]) => !k.startsWith('_')));
+} catch (err) {
+  if (err.code !== 'ENOENT') throw new Error(`${LM_OVERRIDES}: ${err.message}`);
+}
+const lmOverrideOf = (iso) => ({ include: lmOverrides[iso]?.include || [], exclude: new Set(lmOverrides[iso]?.exclude || []) });
+
+// Names that are not landmarks: every country (es/en), every city in
+// cities.json (es/en) and every first-level unit in public/data/admin.
+const fold = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const placeNames = new Set();
+for (const c of facts.countries) for (const n of [c.name?.es, c.name?.en, c.official?.es, c.official?.en]) if (n) placeNames.add(fold(n));
+try {
+  const cities = JSON.parse(await readFile(join(root, 'public/data/cities.json'), 'utf8'));
+  for (const list of Object.values(cities.countries || {})) for (const c of list) for (const n of [c.name?.es, c.name?.en]) if (n) placeNames.add(fold(n));
+} catch { /* cities.json is optional here */ }
+try {
+  const adminDir = join(root, 'public/data/admin');
+  for (const f of await readdir(adminDir)) {
+    if (!/-adm1\.json$/.test(f)) continue;
+    const geo = JSON.parse(await readFile(join(adminDir, f), 'utf8'));
+    for (const ft of geo.features || []) if (ft.properties?.name) placeNames.add(fold(ft.properties.name));
+  }
+} catch { /* no admin data */ }
+
+// kind of an item from its P31 classes (any depth, through the class tree map)
+const classRoots = new Map(); // class qid -> Set(root qid)
+const kindOfRoot = (r) => KIND_PRIORITY.find((name) => LANDMARK_ROOTS[name].includes(r));
+const rootsOf = (classes) => {
+  const roots = new Set();
+  for (const c of classes) for (const r of classRoots.get(c) || []) roots.add(r);
+  return roots;
+};
+const kindOf = (roots) => {
+  const kinds = new Set([...roots].map(kindOfRoot));
+  return KIND_PRIORITY.find((k) => kinds.has(k)) || 'other';
+};
+
+const landmarkFields = `
+  (SAMPLE(?coord) AS ?coord) (SAMPLE(?img) AS ?image)
+  (GROUP_CONCAT(DISTINCT STR(?cls); separator=" ") AS ?classes)
+  (GROUP_CONCAT(DISTINCT STR(?bad); separator=" ") AS ?bads)
+  (SAMPLE(?gone) AS ?gone) (SAMPLE(?collection) AS ?collection)
+  (SAMPLE(?les) AS ?les) (SAMPLE(?len) AS ?len) (SAMPLE(?lmul) AS ?lmul)
+  (SAMPLE(?des) AS ?des) (SAMPLE(?den) AS ?den)
+  (SAMPLE(?wes) AS ?wes) (SAMPLE(?wen) AS ?wen)`;
+// (BIND(EXISTS {...}) comes back unbound from Blazegraph; an OPTIONAL join
+// with GROUP_CONCAT does the same job.)
+const landmarkOptionals = `
+  ?item wdt:P31 ?cls .
+  OPTIONAL { VALUES ?bad { ${NOT_A_PLACE_TREES.map(wd).join(' ')} } ?item wdt:P31 ?b1 . ?b1 wdt:P279* ?bad . }
+  OPTIONAL { ?item wdt:P576 ?gone }
+  OPTIONAL { ?item wdt:P195 ?collection }
+  OPTIONAL { ?item wdt:P625 ?coord }
+  OPTIONAL { ?item wdt:P18 ?img }
+  OPTIONAL { ?item rdfs:label ?les FILTER(LANG(?les) = "es") }
+  OPTIONAL { ?item rdfs:label ?len FILTER(LANG(?len) = "en") }
+  OPTIONAL { ?item rdfs:label ?lmul FILTER(LANG(?lmul) = "mul") }
+  OPTIONAL { ?item schema:description ?des FILTER(LANG(?des) = "es") }
+  OPTIONAL { ?item schema:description ?den FILTER(LANG(?den) = "en") }
+  OPTIONAL { ?wes schema:about ?item ; schema:isPartOf <https://es.wikipedia.org/> }
+  OPTIONAL { ?wen schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> }`;
+
+function landmarkRow(b) {
+  const label = bi(v(b, 'les'), v(b, 'len'), v(b, 'lmul'));
+  const ll = parsePoint(v(b, 'coord'));
+  const image = commonsName(v(b, 'image'));
+  if (!label || !ll || !image) return null;
+  const classes = (v(b, 'classes') || '').split(' ').filter(Boolean).map(qid);
+  const roots = rootsOf(classes);
+  const sitelinks = Number(v(b, 'links'));
+  // A bridge or a skyscraper that is nothing else needs 25 sitelinks.
+  const bigOnly = roots.size > 0 && [...roots].every((r) => BIG_ONLY.includes(r));
+  const wiki = {};
+  if (v(b, 'wes')) wiki.es = v(b, 'wes');
+  if (v(b, 'wen')) wiki.en = v(b, 'wen');
+  return {
+    qid: qid(v(b, 'item')),
+    label,
+    desc: bi(v(b, 'des'), v(b, 'den')),
+    ll,
+    image,
+    wiki,
+    kind: kindOf(roots),
+    sitelinks,
+    notAPlace: classes.some((c) => NOT_A_PLACE_DIRECT.includes(c)) || (v(b, 'bads') || '').trim().length > 0,
+    isSite: classes.some((c) => SITE_DIRECT.includes(c)),
+    tooSmall: bigOnly && sitelinks < BIG_MIN_LINKS,
+    // Demolished or dissolved (P576: the Lighthouse of Alexandria, the
+    // Tuileries), or held in a collection (P195: the Venus de Milo is a
+    // statue, but a museum piece is not a place).
+    gone: !!v(b, 'gone') || !!v(b, 'collection'),
+  };
+}
+
+const landmarks = new Map(); // iso -> [item]
+const lmStats = { queried: 0, failed: [], candidates: 0, droppedHeritage: 0, droppedNotAPlace: 0, droppedGone: 0, droppedName: 0, droppedExcluded: 0, natureCapped: 0, curated: 0, curatedMissing: [] };
+{
+  // Class tree -> kind, once (about 6,000 rows).
+  const rows = await sparql(`SELECT DISTINCT ?k ?root WHERE {${classTreeSparql}
+}`, 'landmark classes');
+  for (const b of rows) {
+    const k = qid(v(b, 'k'));
+    if (!classRoots.has(k)) classRoots.set(k, new Set());
+    classRoots.get(k).add(qid(v(b, 'root')));
+  }
+  console.log(`landmark classes: ${classRoots.size} classes under ${allRoots.length} roots`);
+
+  const heritageIds = new Map(); // iso -> Set(qid)
+  for (const c of matched) {
+    const list = LANDMARKS_ONLY ? (prev?.countries?.[c.iso2]?.heritage || []) : (heritage.get(c.iso2) || []);
+    heritageIds.set(c.iso2, new Set(list.map((s) => s.qid)));
+  }
+
+  // Curated includes, one query for every id.
+  const included = new Map(); // qid -> row
+  {
+    const ids = new Set();
+    for (const [iso, o] of Object.entries(lmOverrides)) {
+      if (!matched.some((c) => c.iso2 === iso)) { console.warn(`landmark overrides: ${iso} is not a country in facts.json, skipped`); continue; }
+      if (ONLY && !ONLY.has(iso)) continue;
+      for (const q of o.include || []) ids.add(q);
+    }
+    if (ids.size) {
+      const rows = await sparql(`
+SELECT ?item (SAMPLE(?links) AS ?links) ${landmarkFields} WHERE {
+  VALUES ?item { ${[...ids].map(wd).join(' ')} }
+  ?item wikibase:sitelinks ?links .${landmarkOptionals}
+} GROUP BY ?item`, 'curated landmarks');
+      for (const b of rows) {
+        const row = landmarkRow(b);
+        if (row) included.set(row.qid, row);
+        else lmStats.curatedMissing.push(`${qid(v(b, 'item'))} (no label, coordinates or photo)`);
+      }
+      for (const q of ids) if (!included.has(q) && !lmStats.curatedMissing.some((m) => m.startsWith(q))) lmStats.curatedMissing.push(`${q} (not found)`);
+    }
+  }
+
+  const todo = matched.filter((c) => !ONLY || ONLY.has(c.iso2));
+  for (const c of todo) {
+    const iso = c.iso2;
+    const own = new Set(c.q ? [c.q] : []);
+    let rows;
+    try {
+      // Two requests: the candidates (left to the optimizer, see above) and
+      // their details (pinned: start from the VALUES list, then the
+      // OPTIONALs). In one request the optimizer also reshuffles the outer
+      // OPTIONALs and the whole thing times out.
+      const cands = await sparql(`
+SELECT DISTINCT ?item ?links WHERE {
+  ?item wdt:P17 ${wd(c.q)} .
+  ?item wdt:P31 ?k .
+  { SELECT DISTINCT ?k WHERE {${classTreeSparql}
+  } }
+  ?item wikibase:sitelinks ?links .
+  FILTER(?links >= ${MIN_LINKS})
+  ?item wdt:P625 ?c0 .
+  ?item wdt:P18 ?i0 .
+} ORDER BY DESC(?links) LIMIT ${CANDIDATES}`, `landmarks ${iso}`);
+      rows = cands.length ? await sparql(`
+SELECT ?item (SAMPLE(?links) AS ?links) ${landmarkFields} WHERE {
+  hint:Query hint:optimizer "None" .
+  VALUES ?item { ${cands.map((b) => wd(qid(v(b, 'item')))).join(' ')} }
+  ?item wikibase:sitelinks ?links .${landmarkOptionals}
+} GROUP BY ?item`, `landmark details ${iso}`) : [];
+    } catch (err) {
+      lmStats.failed.push(iso);
+      console.warn(`landmarks ${iso}: ${err.message}; keeping the previous list`);
+      const old = prev?.countries?.[iso]?.landmarks;
+      if (old) landmarks.set(iso, old.map((l) => ({ ...l, keep: true })));
+      continue;
+    }
+    lmStats.queried += 1;
+    const { include, exclude } = lmOverrideOf(iso);
+    const seen = new Set();
+    const pool = [];
+    const consider = (row, curated) => {
+      if (!row || seen.has(row.qid) || own.has(row.qid)) return;
+      seen.add(row.qid);
+      if (exclude.has(row.qid)) { lmStats.droppedExcluded += 1; return; }
+      if (heritageIds.get(iso)?.has(row.qid)) { lmStats.droppedHeritage += 1; return; }
+      if (!curated) {
+        if (row.tooSmall) return;
+        if (row.gone) { lmStats.droppedGone += 1; return; }
+        if (row.notAPlace && !row.isSite) { lmStats.droppedNotAPlace += 1; return; }
+        if (placeNames.has(fold(row.label.es)) || placeNames.has(fold(row.label.en))) { lmStats.droppedName += 1; return; }
+      }
+      const { notAPlace, isSite, tooSmall, gone, ...item } = row;
+      pool.push(curated ? { ...item, curated: true } : item);
+    };
+    for (const q of include) consider(included.get(q), true);
+    for (const b of rows) { lmStats.candidates += 1; consider(landmarkRow(b), false); }
+    pool.sort((a, b) => b.sitelinks - a.sitelinks);
+    if (pool.length) landmarks.set(iso, pool);
+  }
+  // Countries outside --country keep what the file already has.
+  if (ONLY && prev) {
+    for (const c of matched) {
+      if (ONLY.has(c.iso2) || landmarks.has(c.iso2)) continue;
+      const old = prev.countries?.[c.iso2]?.landmarks;
+      if (old?.length) landmarks.set(c.iso2, old.map((l) => ({ ...l, keep: true })));
+    }
+  }
+}
+
+// Cap per country: curated first, then by sitelinks, nature at most a quarter.
+function capLandmarks(list, max) {
+  if (list.length && list[0].keep) return list.slice(0, max).map(({ keep, ...l }) => l);
+  const natureMax = Math.ceil(max * NATURE_SHARE);
+  const out = [];
+  let nature = 0;
+  const sorted = [...list].sort((a, b) => Number(!!b.curated) - Number(!!a.curated) || b.sitelinks - a.sitelinks);
+  for (const l of sorted) {
+    if (out.length >= max) break;
+    if (l.kind === 'nature' && !l.curated) {
+      if (nature >= natureMax) { lmStats.natureCapped += 1; continue; }
+      nature += 1;
+    }
+    out.push(l);
+  }
+  return out.sort((a, b) => b.sitelinks - a.sitelinks);
+}
+
+// ---------------------------------------------------------------------------
 // 6. Assemble. Local sites with a photo and coordinates first, then the ones
 //    more Wikipedias write about. Dishes: national ones first, then by sitelinks.
 
@@ -469,13 +794,18 @@ const out = {
     images: 'Each image is a Wikimedia Commons file with its own license; show the author and license from the file page. Thumbnail: https://commons.wikimedia.org/wiki/Special:FilePath/<image>?width=640',
     text: 'desc and wiki links point to Wikipedia (CC BY-SA 4.0).',
   },
-  notes: 'heritage = UNESCO World Heritage sites (P1435=Q9259 with a P757 id) whose P17 is the country, capped at 25, shared=n when the site spans n countries; dishes = items filed under the national cuisine (P2012) with a photo and no foreign country of origin, not filed under Tex-Mex (Q29359), ranked by sitelinks, national=true when tagged Q1391582; curated=true (and region) on dishes a person picked in data/overrides/dishes.json, which go first; anthem = P85; demonym = P1549.',
+  notes: 'heritage = UNESCO World Heritage sites (P1435=Q9259 with a P757 id) whose P17 is the country, capped at 25, shared=n when the site spans n countries; dishes = items filed under the national cuisine (P2012) with a photo and no foreign country of origin, not filed under Tex-Mex (Q29359), ranked by sitelinks, national=true when tagged Q1391582; curated=true (and region) on dishes a person picked in data/overrides/dishes.json, which go first; anthem = P85; demonym = P1549.'
+    + ` landmarks = items in the country (P17) with coordinates and a photo whose class (P31) is under tourist attraction (Q570116) or under a list of place classes (park, museum, square, beach, archaeological site, church, temple, palace, tower, bridge, market, nature...), not in heritage, not a settlement or an administrative unit, not named like a country, state or city, ranked by sitelinks, capped at ${MAX_LANDMARKS} with nature at most a quarter; kind = the class tag; curated=true on items a person added in data/overrides/landmarks.json.`,
   countries: {},
 };
 
 const stats = { withHeritage: 0, sites: 0, sitesWithImage: 0, sitesWithLl: 0, withDishes: 0, dishes: 0, withCuisine: 0, withAnthem: 0, withDemonym: 0, capped: [], curated: [] };
 
-for (const c of countries) {
+function assembleCountry(c) {
+  if (LANDMARKS_ONLY) {
+    const { landmarks: _old, ...rest } = prev.countries?.[c.iso2] || { qid: c.q, demonym: null, anthem: null, cuisine: null, dishes: [], heritage: [] };
+    return rest;
+  }
   const sites = (heritage.get(c.iso2) || [])
     .map((s) => ({ ...s, shared: siteCountries.get(s.qid) }))
     .sort((a, b) => (Number(a.shared > 1) - Number(b.shared > 1))
@@ -492,7 +822,7 @@ for (const c of countries) {
     .map(({ links, national, local, ...d }) => (national ? { ...d, national: true } : d)));
   if (picked.length) stats.curated.push(`${c.iso2}:${picked.length}`);
   const cu = cuisine.get(c.iso2);
-  const entry = {
+  return {
     qid: c.q,
     demonym: demonym.get(c.iso2) || null,
     anthem: anthem.get(c.iso2) ? (({ score, ...a }) => a)(anthem.get(c.iso2)) : null,
@@ -500,14 +830,21 @@ for (const c of countries) {
     dishes: ds,
     heritage: kept,
   };
+}
+
+for (const c of countries) {
+  const entry = assembleCountry(c);
+  entry.landmarks = capLandmarks(landmarks.get(c.iso2) || [], MAX_LANDMARKS);
   out.countries[c.iso2] = entry;
+  const kept = entry.heritage;
+  const ds = entry.dishes;
   if (kept.length) stats.withHeritage += 1;
   stats.sites += kept.length;
   stats.sitesWithImage += kept.filter((s) => s.image).length;
   stats.sitesWithLl += kept.filter((s) => s.ll).length;
   if (ds.length) stats.withDishes += 1;
   stats.dishes += ds.length;
-  if (cu) stats.withCuisine += 1;
+  if (entry.cuisine) stats.withCuisine += 1;
   if (entry.anthem) stats.withAnthem += 1;
   if (entry.demonym) stats.withDemonym += 1;
 }
@@ -519,7 +856,7 @@ for (const c of countries) {
 //    per language in batches, with the "mul" label as a fallback (a name that
 //    is the same in every language). null when Wikidata has no label.
 
-const localStats = { dishes: 0, dishesDiffer: 0, cuisines: 0, sites: 0, langs: new Set(), queries: 0 };
+const localStats = { dishes: 0, dishesDiffer: 0, cuisines: 0, sites: 0, landmarks: 0, langs: new Set(), queries: 0 };
 {
   const WD_LANGS = { no: ['nb', 'no'] }; // Wikidata codes that differ from the table
   const want = new Map(); // lang -> Map(qid -> [objects whose label gets .local])
@@ -528,9 +865,13 @@ const localStats = { dishes: 0, dishesDiffer: 0, cuisines: 0, sites: 0, langs: n
     if (!entry) continue;
     const lang = localLangOf(c);
     entry.localLang = lang;
-    const targets = [...entry.dishes, ...entry.heritage, ...(entry.cuisine ? [entry.cuisine] : [])];
+    // In --landmarks-only mode dishes, cuisine and heritage keep the local
+    // labels the file already has; only the landmarks are (re)labelled.
+    const targets = LANDMARKS_ONLY
+      ? [...entry.landmarks]
+      : [...entry.dishes, ...entry.heritage, ...entry.landmarks, ...(entry.cuisine ? [entry.cuisine] : [])];
     for (const t of targets) t.label = { ...t.label, local: null };
-    for (const d of entry.dishes) d.localLang = lang;
+    if (!LANDMARKS_ONLY) for (const d of entry.dishes) d.localLang = lang;
     if (!lang) continue;
     if (lang === 'es' || lang === 'en') {
       for (const t of targets) t.label.local = t.label[lang];
@@ -581,13 +922,43 @@ SELECT ?item ?l WHERE {
 }
 out.notes += ' label.local = the label in the country\'s first language (localLang, from facts.json languages[0]), mul as fallback, null when Wikidata has none.';
 
-await writeFile(OUT, JSON.stringify(out));
+// Size guard: landmarks are the part that can grow; past MAX_BYTES the cap
+// drops to MAX_LANDMARKS_SMALL per country (curated items stay).
+let json = JSON.stringify(out);
+let landmarkCap = MAX_LANDMARKS;
+if (Buffer.byteLength(json) > MAX_BYTES) {
+  landmarkCap = MAX_LANDMARKS_SMALL;
+  for (const entry of Object.values(out.countries)) entry.landmarks = capLandmarks(entry.landmarks, landmarkCap);
+  out.notes = out.notes.replace(`capped at ${MAX_LANDMARKS} with`, `capped at ${landmarkCap} with`);
+  json = JSON.stringify(out);
+  console.log(`places.json would pass ${(MAX_BYTES / 1024 / 1024).toFixed(0)} MB: landmarks capped at ${landmarkCap} per country`);
+}
+for (const entry of Object.values(out.countries)) localStats.landmarks += entry.landmarks.filter((s) => s.label.local).length;
+await writeFile(OUT, json);
 const { size } = await stat(OUT);
 console.log(`wrote ${OUT} (${(size / 1024).toFixed(0)} KB)`);
+{
+  const entries = Object.entries(out.countries);
+  const withLm = entries.filter(([, e]) => e.landmarks.length);
+  const total = entries.reduce((n, [, e]) => n + e.landmarks.length, 0);
+  const curatedN = entries.reduce((n, [, e]) => n + e.landmarks.filter((l) => l.curated).length, 0);
+  const kinds = new Map();
+  for (const [, e] of entries) for (const l of e.landmarks) kinds.set(l.kind, (kinds.get(l.kind) || 0) + 1);
+  const full = withLm.filter(([, e]) => e.landmarks.length >= landmarkCap).length;
+  console.log(`landmarks: ${lmStats.queried} countries queried${lmStats.failed.length ? ` (${lmStats.failed.length} failed: ${lmStats.failed.join(' ')})` : ''}, ${lmStats.candidates} candidates; ${withLm.length} countries with landmarks, ${total} landmarks (${full} at the cap of ${landmarkCap}), ${curatedN} curated${lmStats.curatedMissing.length ? `; curated but skipped: ${lmStats.curatedMissing.join(', ')}` : ''}`);
+  console.log(`landmark filters: already heritage ${lmStats.droppedHeritage}, settlement/admin/island/river ${lmStats.droppedNotAPlace}, demolished or in a collection ${lmStats.droppedGone}, named like a place ${lmStats.droppedName}, excluded by override ${lmStats.droppedExcluded}, nature over the cap ${lmStats.natureCapped}`);
+  console.log(`landmark kinds: ${[...kinds].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ')}`);
+  for (const iso of SHOW) {
+    const list = out.countries[iso]?.landmarks || [];
+    console.log(`\n${iso}: top ${Math.min(20, list.length)} of ${list.length} landmarks`);
+    for (const l of list.slice(0, 20)) console.log(`  ${String(l.sitelinks).padStart(4)}  ${l.kind.padEnd(9)} ${l.label.en}${l.label.es !== l.label.en ? ` / ${l.label.es}` : ''}${l.curated ? '  (curated)' : ''}`);
+  }
+  console.log('');
+}
 console.log(`heritage: ${stats.withHeritage} countries, ${stats.sites} sites, ${stats.sitesWithImage} with image, ${stats.sitesWithLl} with coordinates; capped at ${MAX_HERITAGE}: ${stats.capped.join(' ') || 'none'}`);
 console.log(`cuisine: ${stats.withCuisine} countries; dishes: ${stats.withDishes} countries, ${stats.dishes} dishes; curated: ${stats.curated.join(' ') || 'none'}`);
 const sum = (m) => [...m.values()].reduce((a, b) => a + b, 0);
 const top = (m) => [...m].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, n]) => `${k}:${n}`).join(' ');
 console.log(`dish filters: Tex-Mex ${sum(filterStats.texmex)} (${top(filterStats.texmex) || 'none'}); foreign origin ${sum(filterStats.origin)} (${top(filterStats.origin) || 'none'}); no origin and not this cuisine ${sum(filterStats.noCuisine)} (${top(filterStats.noCuisine) || 'none'}); excluded by override ${sum(filterStats.excluded)} (${top(filterStats.excluded) || 'none'})`);
 console.log(`anthem: ${stats.withAnthem} countries; demonym: ${stats.withDemonym} countries`);
-console.log(`local labels: ${localStats.langs.size} languages, ${localStats.queries} label queries; dishes ${localStats.dishes} (${localStats.dishesDiffer} differ from es/en), cuisines ${localStats.cuisines}, sites ${localStats.sites}`);
+console.log(`local labels: ${localStats.langs.size} languages, ${localStats.queries} label queries; dishes ${localStats.dishes} (${localStats.dishesDiffer} differ from es/en), cuisines ${localStats.cuisines}, sites ${localStats.sites}, landmarks ${localStats.landmarks}`);

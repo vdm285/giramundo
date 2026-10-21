@@ -1,0 +1,23 @@
+{
+  "_readme": "Per-country curation of the landmarks in the Lugares card, read by tools/build-places.mjs (npm run places). Every entry is a Wikidata item (Q-id); the build fetches its label, description, coordinates and photo and skips, with a warning, an id that has no coordinates or no photo (P18). include = must appear (ranked by sitelinks with the rest, never dropped by the cap, bypasses the class and name filters, carries curated: true); exclude = never shown, whatever Wikidata files it under; note = why, for the next person. Keys starting with _ are comments. See docs/PIPELINES.md, Places > Landmarks.",
+  "MX": {
+    "note": "Curated 2026-10-20. The generic list is strong on archaeological sites and volcanoes and thin on the places people actually go: Xochimilco (its canals have no item of their own, so the borough item stands for them), Xcaret (9 sitelinks, under the cut), the Sumidero and Copper canyons, Hierve el Agua, the Soumaya museum, the Torre Latinoamericana, the Ik Kil cenote, Bacalar lagoon. Excluded: Lake Texcoco (drained in the 17th century, nothing to visit), the Mexico-United States border wall (not a place to visit), Cofre de Perote (Q119656), whose English label on Wikidata read 'Cofre de Peru en tanga' on 2026-10-20, vandalism that belongs fixed at the source; drop the exclusion once the label is restored.",
+    "include": ["Q643026", "Q3570845", "Q775138", "Q674485", "Q155246", "Q2097646", "Q947870", "Q1818515", "Q2881167"],
+    "exclude": ["Q13700", "Q2631595", "Q119656"]
+  },
+  "JP": {
+    "note": "Shibuya Crossing is filed as an intersection, a class no list of landmarks can include wholesale; the Arashiyama bamboo forest is filed as a forest. Both are among the most visited places in Japan.",
+    "include": ["Q21083961", "Q23579173"],
+    "exclude": []
+  },
+  "US": {
+    "note": "The five Great Lakes have more sitelinks than anything in the country but are inland seas, not places one visits; without this the nature quota is all lakes.",
+    "include": [],
+    "exclude": ["Q1066", "Q1169", "Q1383", "Q5492", "Q1062"]
+  },
+  "CA": {
+    "note": "Same Great Lakes as the United States entry.",
+    "include": [],
+    "exclude": ["Q1066", "Q1383", "Q5492", "Q1062"]
+  }
+}
