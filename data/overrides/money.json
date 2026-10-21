@@ -1,0 +1,50 @@
+{
+  "_readme": "Per-currency image overrides for the Money card, read by tools/build-money.mjs (npm run money, or npm run money -- --overrides-only). Only sources with PUBLISHED reuse terms or a written authorization from the issuer go here; never Numista, Colnect, shop photos or Wikipedia fair-use files. Each entry's `src` is an https URL (optionally with `entry` = a path inside a zip), `commons:<file name>` for a Wikimedia Commons file, or a path under data/sources/money/ for a file the owner received (committed, small). The build downloads to data/cache/money/, writes public/data/money/<CODE>/<denomination>-<side>.<ext> and puts the entries FIRST in money.json with `local`, `license`, `credit`, `terms`, `historical: false`. `specimen: true` asks for a diagonal SPECIMEN overlay (needs sharp) and is only for sources whose terms demand it. `terms` is the page that grants the reuse; `note` says why it is allowed, for the next person. Keys starting with _ are comments. See docs/PIPELINES.md, Money > Overrides, and docs/research/banknotes.md.",
+  "USD": {
+    "issuer": { "es": "Reserva Federal de Estados Unidos", "en": "Federal Reserve" },
+    "license": "Public domain (U.S. Government work)",
+    "terms": "https://www.uscurrency.gov/media/currency-image-use",
+    "credit": "U.S. Currency Education Program, uscurrency.gov",
+    "specimen": false,
+    "note": "uscurrency.gov is the Federal Reserve Board's U.S. Currency Education Program; its multimedia library labels the note images 'Public Domain, owner U.S. Currency Education Program', and BEP's currency-image-use page restates 18 U.S.C. 504 / 31 CFR 411: color illustrations are lawful when one-sided and smaller than 3/4 or larger than 1.5x of the note. We show one side (the face) at screen size. The files are the ones each denomination page serves (Drupal originals under /sites/default/files/denominations/) and already carry the program's own SPECIMEN watermark; no overlay is added. `year` is the first year of the design in circulation as uscurrency.gov labels it ('2013-present'); the $1 design dates from 1963 and the $2 from 1976 and both still circulate unchanged. Verified 2026-10-20: every URL answers 200 image/jpeg or image/png.",
+    "banknotes": [
+      { "denomination": "1", "year": 1963, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/denominations/1_1963-present-front-1_0.jpg", "page": "https://www.uscurrency.gov/denominations/1" },
+      { "denomination": "2", "year": 1976, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/denominations/2_1976-present-front%20%281%29.jpg", "page": "https://www.uscurrency.gov/denominations/2" },
+      { "denomination": "5", "year": 2008, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/denominations/%245-FRN-2021-face.png", "page": "https://www.uscurrency.gov/denominations/5" },
+      { "denomination": "10", "year": 2006, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/denominations/10_2006-present-front-v2.1-jpg.jpg", "page": "https://www.uscurrency.gov/denominations/10" },
+      { "denomination": "20", "year": 2003, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/denominations/20_2003-present-front.jpg", "page": "https://www.uscurrency.gov/denominations/20" },
+      { "denomination": "50", "year": 2004, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/denominations/50-front-2004-present.jpg", "page": "https://www.uscurrency.gov/denominations/50" },
+      { "denomination": "100", "year": 2013, "side": "obverse", "src": "https://www.uscurrency.gov/sites/default/files/media/images/100-front-2013-present.jpg", "page": "https://www.uscurrency.gov/media/multimedia-library/65" }
+    ],
+    "coins": []
+  },
+  "EUR": {
+    "issuer": { "es": "Banco Central Europeo", "en": "European Central Bank" },
+    "license": "© ECB; reproduction permitted under Decision ECB/2013/10 (specimen, 72 dpi)",
+    "terms": "https://www.ecb.europa.eu/euro/banknotes/images/html/index.en.html",
+    "credit": "European Central Bank",
+    "specimen": false,
+    "note": "The ECB's 'Images and reproduction rules' page: 'You are free to use images of euro banknotes without prior authorisation as long as you comply with the ECB's rules on the reproduction of banknotes (Article 2 of Decision ECB/2013/10)' and 'You are free to download low-resolution (72 dpi) images of euro banknotes marked with the word specimen'. The files below are taken, unchanged, from the ECB's own 'Images of euro banknotes series 2' zip (Europa series, Lagarde signature, 72 dpi, SPECIMEN already printed diagonally across each note), so no overlay is added and they must never be upscaled or cleaned. `year` is the year the Europa-series denomination entered circulation (5: 2013, 10: 2014, 20: 2015, 50: 2017, 100 and 200: 2019). No 500 euro in the Europa series. Euro coins are not here: the coin designs belong to the European Commission and the national mints, and the ECB site publishes no reuse rule for its coin images.",
+    "banknotes": [
+      { "denomination": "5", "year": 2013, "series": "Europa", "side": "obverse", "src": "https://www.ecb.europa.eu/euro/shared/img/Banknotes%20ES2%20Specimen%2072dpi.zip", "entry": "Banknotes ES2 Specimen 72dpi/ES2 Specimen Lagarde Signature_jpg/ECB 5 Euro Specimen Front with Lagarde signature.jpg" },
+      { "denomination": "10", "year": 2014, "series": "Europa", "side": "obverse", "src": "https://www.ecb.europa.eu/euro/shared/img/Banknotes%20ES2%20Specimen%2072dpi.zip", "entry": "Banknotes ES2 Specimen 72dpi/ES2 Specimen Lagarde Signature_jpg/ECB 10 Euro Specimen Front with Lagarde signature.jpg" },
+      { "denomination": "20", "year": 2015, "series": "Europa", "side": "obverse", "src": "https://www.ecb.europa.eu/euro/shared/img/Banknotes%20ES2%20Specimen%2072dpi.zip", "entry": "Banknotes ES2 Specimen 72dpi/ES2 Specimen Lagarde Signature_jpg/ECB 20 Euro Specimen Front with Lagarde signature.jpg" },
+      { "denomination": "50", "year": 2017, "series": "Europa", "side": "obverse", "src": "https://www.ecb.europa.eu/euro/shared/img/Banknotes%20ES2%20Specimen%2072dpi.zip", "entry": "Banknotes ES2 Specimen 72dpi/ES2 Specimen Lagarde Signature_jpg/ECB 50 Euro Specimen Front with Lagarde signature.jpg" },
+      { "denomination": "100", "year": 2019, "series": "Europa", "side": "obverse", "src": "https://www.ecb.europa.eu/euro/shared/img/Banknotes%20ES2%20Specimen%2072dpi.zip", "entry": "Banknotes ES2 Specimen 72dpi/ES2 Specimen Lagarde Signature_jpg/ECB 100 Euro Specimen Front with Lagarde signature.jpg" },
+      { "denomination": "200", "year": 2019, "series": "Europa", "side": "obverse", "src": "https://www.ecb.europa.eu/euro/shared/img/Banknotes%20ES2%20Specimen%2072dpi.zip", "entry": "Banknotes ES2 Specimen 72dpi/ES2 Specimen Lagarde Signature_jpg/ECB 200 Euro Specimen Front with Lagarde signature.jpg" }
+    ],
+    "coins": []
+  },
+  "MXN": {
+    "issuer": { "es": "Banco de México", "en": "Bank of Mexico" },
+    "license": "CC0",
+    "terms": "https://commons.wikimedia.org/wiki/File:1peso_2025.png",
+    "credit": "GoVargasV, Wikimedia Commons",
+    "specimen": false,
+    "note": "Banknotes: none. Banco de México publishes no reuse terms (Ley Monetaria art. 17: SHCP authorization required); the owner is requesting one, and when files arrive they go under data/sources/money/MXN/ with the letter's conditions written into `license` and `note`. The coin is the one current Mexican coin Commons holds as a cut-out: the value side of the 2025 1-peso coin, CC0 (no rights reserved by the photographer; the coin design itself stays Banxico's, as with every coin photo on the card).",
+    "banknotes": [],
+    "coins": [
+      { "denomination": "1", "year": 2025, "side": "obverse", "src": "commons:1peso 2025.png" }
+    ]
+  }
+}

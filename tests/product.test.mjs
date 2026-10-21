@@ -5,6 +5,7 @@ import { searchCountries, prepareSearch } from '../src/data/search.js';
 import { buildHash, parseHash, SECTIONS } from '../src/app/router.js';
 import { disputeNote } from '../src/data/disputed.js';
 import { displayCapital, mainZone, sentences } from '../src/data/format.js';
+import { splitBills } from '../src/dossier/money.js';
 
 const facts = JSON.parse(readFileSync(new URL('../public/data/facts.json', import.meta.url)));
 const countries = prepareSearch(facts.countries.map((c) => ({ ...c, onMap: true })));
@@ -50,4 +51,36 @@ test('capital wording stays honest and extracts cut at a sentence', () => {
   assert.equal(mainZone(mx), 'America/Mexico_City');
   const long = 'Primera frase larga que sirve de relleno para la prueba. Segunda frase. Tercera frase que ya no cabe.';
   assert.equal(sentences(long, 75), 'Primera frase larga que sirve de relleno para la prueba. Segunda frase.');
+});
+
+test('money overrides: an issuer file is current whatever its year, and every override names its terms', () => {
+  const { current, old, uncertain } = splitBills([
+    { local: 'money/USD/1-obverse.jpg', year: 1963, terms: 'https://www.uscurrency.gov/media/currency-image-use' },
+    { file: 'Partes de los billetes D1.jpg' },
+    { file: 'Billete de 5 pesos del Banco Yucateco (anverso).jpg' },
+  ]);
+  assert.equal(current.length, 1);
+  assert.equal(current[0].local, 'money/USD/1-obverse.jpg');
+  assert.equal(old.length, 1);
+  assert.equal(uncertain, false);
+  assert.equal(splitBills([{ file: 'Billete de 5 pesos del Banco Yucateco (anverso).jpg' }]).uncertain, true);
+  const overrides = JSON.parse(readFileSync(new URL('../data/overrides/money.json', import.meta.url)));
+  for (const [code, o] of Object.entries(overrides)) {
+    if (code.startsWith('_')) continue;
+    assert.match(o.terms || '', /^https:\/\//, `${code} needs the page that grants the reuse`);
+    assert.ok(o.license && o.note, `${code} needs license and note`);
+    for (const f of [...(o.banknotes || []), ...(o.coins || [])]) {
+      assert.ok(f.denomination, `${code}: denomination`);
+      assert.match(String(f.src), /^(https:\/\/|commons:|data\/sources\/money\/)/, `${code} ${f.denomination}: src must be https, commons: or data/sources/money/`);
+      assert.doesNotMatch(String(f.src), /numista|colnect|wikipedia\.org/i, `${code} ${f.denomination}: not a reusable source`);
+    }
+  }
+  const money = JSON.parse(readFileSync(new URL('../public/data/money.json', import.meta.url)));
+  for (const code of ['USD', 'EUR']) {
+    const notes = money.currencies[code].banknotes.filter((b) => b.local);
+    assert.ok(notes.length >= 6, `${code} has its issuer's notes`);
+    assert.equal(money.currencies[code].banknotes[0].local, notes[0].local, `${code}: issuer files come first`);
+    for (const b of notes) assert.ok(b.terms && b.license && b.historical === false, `${code} ${b.denomination}`);
+  }
+  assert.ok(money.currencies.MXN.coins[0].local, 'MXN coin circle shows a real coin');
 });

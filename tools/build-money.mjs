@@ -24,13 +24,26 @@
 // net.mjs, every API response cached under data/cache/commons/ (and
 // data/cache/wikidata/ for the SPARQL). Re-run: npm run money
 // MONEY_ONLY=MXN,JPY npm run money   limits to a few codes; MONEY_DEBUG=1 prints the ranking
+//
+// Overrides (data/overrides/money.json): per currency, images from an issuer
+// with published reuse terms (or a written authorization), downloaded at
+// build time to public/data/money/<CODE>/ and listed FIRST in money.json
+// with `local`. `npm run money -- --overrides-only` keeps the Commons data
+// already in money.json and refreshes only those. See applyOverrides below.
 
-import { writeFile, mkdir, access } from 'node:fs/promises';
+import { writeFile, mkdir, access, readFile, rm, readdir, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
-import { root, cacheDir, sparql as sparqlRaw, getJsonCached, loadFacts, today, pool } from './net.mjs';
+import { join, extname, basename } from 'node:path';
+import { inflateRawSync } from 'node:zlib';
+import { root, cacheDir, sparql as sparqlRaw, getJsonCached, loadFacts, today, pool, fetchRetry, exists } from './net.mjs';
 
 const OUT = join(root, 'public/data/money.json');
+const OVERRIDES = join(root, 'data/overrides/money.json');
+const MONEY_DIR = join(root, 'public/data/money');
+const DL_CACHE = join(cacheDir, 'money');
+const OVERRIDES_ONLY = process.argv.includes('--overrides-only');
+const MAX_LOCAL_WIDTH = 1200;
+const JPEG_QUALITY = 82;
 const MAX_BYTES = 600 * 1024;
 const MAX_NOTES = 8;
 const MAX_COINS = 6;
@@ -98,10 +111,13 @@ for (const c of facts.countries) {
   }
 }
 const countryName = new Map(facts.countries.map((c) => [c.iso2, c.name]));
-const codeList = [...codes.keys()].sort().filter((c) => !ONLY || ONLY.has(c));
-console.log(`${codeList.length} currency codes in facts.json`);
+// --overrides-only: no Wikidata, no Commons; the Commons lists come from the
+// money.json already on disk.
+const previous = OVERRIDES_ONLY ? JSON.parse(await readFile(OUT, 'utf8')) : null;
+const codeList = OVERRIDES_ONLY ? [] : [...codes.keys()].sort().filter((c) => !ONLY || ONLY.has(c));
+console.log(OVERRIDES_ONLY ? `overrides only (Commons data kept from ${OUT})` : `${codeList.length} currency codes in facts.json`);
 
-const wdRows = await sparql(`
+const wdRows = codeList.length ? await sparql(`
 SELECT ?code ?c ?links ?l_es ?l_en ?l_mul ?cat ?img ?iss ?iss_es ?iss_en ?iss_mul WHERE {
   VALUES ?code { ${codeList.map((c) => `"${c}"`).join(' ')} }
   ?c wdt:P498 ?code .
@@ -116,7 +132,7 @@ SELECT ?code ?c ?links ?l_es ?l_en ?l_mul ?cat ?img ?iss ?iss_es ?iss_en ?iss_mu
              OPTIONAL { ?iss rdfs:label ?iss_es FILTER(LANG(?iss_es) = "es") }
              OPTIONAL { ?iss rdfs:label ?iss_en FILTER(LANG(?iss_en) = "en") }
              OPTIONAL { ?iss rdfs:label ?iss_mul FILTER(LANG(?iss_mul) = "mul") } }
-}`);
+}`) : [];
 
 function bi(es, en, mul) {
   if (!es && !en && !mul) return null;
@@ -739,17 +755,221 @@ await pool(codeList, POOL, async (code) => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Write, keeping the file under MAX_BYTES.
+// 7. Overrides: official files, downloaded, placed first.
+
+// sharp is optional (not a dependency): with it, files are resized to
+// MAX_LOCAL_WIDTH and JPEGs re-encoded; without it they are copied as-is.
+let sharp = null;
+try { sharp = (await import('sharp')).default; } catch { /* copy as-is */ }
+
+const sha = (s) => createHash('sha1').update(s).digest('hex').slice(0, 16);
+function sniff(buf) {
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { mime: 'image/jpeg', ext: 'jpg' };
+  if (buf.length > 8 && buf.readUInt32BE(0) === 0x89504e47) return { mime: 'image/png', ext: 'png' };
+  if (buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return { mime: 'image/webp', ext: 'webp' };
+  if (buf.length > 4 && buf.readUInt32LE(0) === 0x04034b50) return { mime: 'application/zip', ext: 'zip' };
+  return null;
+}
+// Pixel size without a dependency: PNG IHDR, JPEG SOFn, WebP VP8/VP8L/VP8X.
+function dimensions(buf) {
+  const k = sniff(buf);
+  if (!k) return null;
+  if (k.ext === 'png') return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (k.ext === 'jpg') {
+    let i = 2;
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xff) { i += 1; continue; }
+      const marker = buf[i + 1];
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+      const len = buf.readUInt16BE(i + 2);
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      }
+      i += 2 + len;
+    }
+    return null;
+  }
+  if (k.ext === 'webp') {
+    const tag = buf.toString('ascii', 12, 16);
+    if (tag === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) };
+    if (tag === 'VP8L') { const b = buf.readUInt32LE(21); return { w: 1 + (b & 0x3fff), h: 1 + ((b >> 14) & 0x3fff) }; }
+    if (tag === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff };
+  }
+  return null;
+}
+// One entry out of a zip (stored or deflated; no zip64), by exact name.
+function unzipEntry(zip, name) {
+  let eocd = -1;
+  for (let i = zip.length - 22; i >= Math.max(0, zip.length - 66000); i -= 1) {
+    if (zip.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('not a zip (no central directory)');
+  const count = zip.readUInt16LE(eocd + 10);
+  let p = zip.readUInt32LE(eocd + 16);
+  const names = [];
+  for (let n = 0; n < count; n += 1) {
+    if (zip.readUInt32LE(p) !== 0x02014b50) throw new Error('bad central directory');
+    const method = zip.readUInt16LE(p + 10);
+    const csize = zip.readUInt32LE(p + 20);
+    const nlen = zip.readUInt16LE(p + 28);
+    const xlen = zip.readUInt16LE(p + 30);
+    const clen = zip.readUInt16LE(p + 32);
+    const off = zip.readUInt32LE(p + 42);
+    const entryName = zip.toString('utf8', p + 46, p + 46 + nlen);
+    names.push(entryName);
+    if (entryName === name) {
+      if (zip.readUInt32LE(off) !== 0x04034b50) throw new Error('bad local header');
+      const start = off + 30 + zip.readUInt16LE(off + 26) + zip.readUInt16LE(off + 28);
+      const data = zip.subarray(start, start + csize);
+      if (method === 0) return Buffer.from(data);
+      if (method === 8) return inflateRawSync(data);
+      throw new Error(`zip method ${method} not supported`);
+    }
+    p += 46 + nlen + xlen + clen;
+  }
+  throw new Error(`entry not in zip: ${name}\n  entries: ${names.filter((x) => !x.endsWith('/')).slice(0, 60).join(' | ')}`);
+}
+const commonsOriginal = (file) => `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file.replace(/ /g, '_'))}`;
+
+// Download (cached under data/cache/money/ by URL) and check it is an image.
+async function download(url, expectZip) {
+  await mkdir(DL_CACHE, { recursive: true });
+  const path = join(DL_CACHE, `${sha(url)}.${expectZip ? 'zip' : 'bin'}`);
+  if (await exists(path)) return readFile(path);
+  const res = await fetchRetry(url, { headers: { Accept: expectZip ? 'application/zip,*/*' : 'image/*,*/*;q=0.5' } });
+  const type = (res.headers.get('content-type') || '').split(';')[0].trim();
+  const buf = Buffer.from(await res.arrayBuffer());
+  const kind = sniff(buf);
+  const okType = expectZip ? kind?.ext === 'zip' : kind && kind.mime.startsWith('image/');
+  if (!okType) throw new Error(`${url}: not ${expectZip ? 'a zip' : 'an image'} (content-type ${type || '?'}, magic ${kind?.mime || 'unknown'})`);
+  await writeFile(path, buf);
+  return buf;
+}
+
+// The bytes of one override entry: https URL (optionally an entry in a zip),
+// commons:<file>, or a path under data/sources/money/.
+async function sourceBytes(entry) {
+  const src = String(entry.src || '');
+  if (src.startsWith('commons:')) return download(commonsOriginal(src.slice(8).trim()), false);
+  if (/^https:\/\//.test(src)) {
+    if (!entry.entry) return download(src, false);
+    const data = unzipEntry(await download(src, true), entry.entry);
+    if (!sniff(data)?.mime.startsWith('image/')) throw new Error(`${entry.entry}: not an image inside ${src}`);
+    return data;
+  }
+  if (/^data\/sources\/money\//.test(src) && !src.includes('..')) {
+    const buf = await readFile(join(root, src));
+    if (!sniff(buf)?.mime.startsWith('image/')) throw new Error(`${src}: not a JPEG, PNG or WebP`);
+    return buf;
+  }
+  throw new Error(`src must be https://, commons:<file> or data/sources/money/...: ${src}`);
+}
+
+// Resize to MAX_LOCAL_WIDTH and, when the terms demand it, stamp SPECIMEN
+// diagonally at 30% opacity. Both need sharp; without it the file is copied
+// as-is, and an entry that needs the overlay is refused rather than shown bare.
+async function finish(buf, wantSpecimen) {
+  const kind = sniff(buf);
+  if (!sharp) {
+    if (wantSpecimen) throw new Error('specimen overlay requested but sharp is not installed (npm i -D sharp)');
+    return { buf, ext: kind.ext };
+  }
+  let img = sharp(buf, { animated: false }).rotate();
+  const meta = await img.metadata();
+  const w = Math.min(meta.width, MAX_LOCAL_WIDTH);
+  const h = Math.round(meta.height * (w / meta.width));
+  if (meta.width > MAX_LOCAL_WIDTH) img = img.resize({ width: MAX_LOCAL_WIDTH });
+  if (wantSpecimen) {
+    const size = Math.round(Math.min(w, h) * 0.32);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="${size}" fill="#000" fill-opacity="0.3" stroke="#fff" stroke-opacity="0.3" stroke-width="${Math.max(1, size / 40)}" transform="rotate(-25 ${w / 2} ${h / 2})">SPECIMEN</text></svg>`;
+    img = img.composite([{ input: Buffer.from(svg), top: 0, left: 0 }]);
+  }
+  const keepPng = kind.ext === 'png' && meta.hasAlpha;
+  const outBuf = keepPng ? await img.png({ compressionLevel: 9 }).toBuffer() : await img.jpeg({ quality: JPEG_QUALITY, mozjpeg: true }).toBuffer();
+  return { buf: outBuf, ext: keepPng ? 'png' : 'jpg' };
+}
+
+const emptyCurrency = () => ({ name: null, issuer: null, qid: null, image: null, categories: { banknotes: null, coins: null }, banknotes: [], coins: [] });
+const safeName = (s) => String(s).replace(/[^a-z0-9.]+/gi, '_').replace(/^_+|_+$/g, '') || 'x';
+
+async function applyOverrides(currencies) {
+  let overrides;
+  try { overrides = JSON.parse(await readFile(OVERRIDES, 'utf8')); } catch (err) { console.log(`no overrides (${err.message})`); return; }
+  const codesHere = Object.keys(overrides).filter((c) => !c.startsWith('_'));
+  for (const code of codesHere) {
+    const o = overrides[code];
+    if (ONLY && !ONLY.has(code)) continue;
+    if (!o.terms || !o.license) { console.error(`${code}: override needs \`terms\` (the page that grants the reuse) and \`license\`; skipped`); continue; }
+    const cur = currencies[code] || (currencies[code] = emptyCurrency());
+    // Re-runs replace, never duplicate.
+    for (const kind of ['banknotes', 'coins']) cur[kind] = (cur[kind] || []).filter((f) => !f.local);
+    const dir = join(MONEY_DIR, code);
+    await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true });
+    let bytes = 0;
+    for (const kind of ['banknotes', 'coins']) {
+      const made = [];
+      for (const entry of o[kind] || []) {
+        try {
+          const raw = await sourceBytes(entry);
+          const { buf, ext } = await finish(raw, entry.specimen ?? o.specimen ?? false);
+          const side = entry.side || 'obverse';
+          const name = `${safeName(entry.denomination)}-${safeName(side)}.${ext}`;
+          await writeFile(join(dir, name), buf);
+          bytes += buf.length;
+          const dim = dimensions(buf) || {};
+          const isCommons = String(entry.src).startsWith('commons:');
+          const row = {
+            local: `money/${code}/${name}`,
+            denomination: entry.denomination == null ? null : String(entry.denomination),
+            w: dim.w ?? null, h: dim.h ?? null,
+            license: entry.license || o.license,
+            credit: entry.credit || o.credit || null,
+            terms: entry.terms || (isCommons ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(String(entry.src).slice(8).trim().replace(/ /g, '_'))}` : o.terms),
+            historical: false,
+            side,
+          };
+          if (isCommons) row.file = String(entry.src).slice(8).trim();
+          if (entry.year) row.year = entry.year;
+          if (entry.series) row.series = entry.series;
+          if (entry.page) row.page = entry.page;
+          made.push(row);
+        } catch (err) {
+          console.error(`${code} ${kind} ${entry.denomination}: ${err.message}`);
+        }
+      }
+      cur[kind] = [...made, ...cur[kind]];
+    }
+    cur.overrides = true;
+    cur.terms = o.terms;
+    if (o.issuer && (o.issuer.es || o.issuer.en)) cur.issuer = { ...(cur.issuer || {}), ...o.issuer };
+    console.log(`${code}: overrides, ${cur.banknotes.filter((f) => f.local).length} notes + ${cur.coins.filter((f) => f.local).length} coins, ${(bytes / 1024).toFixed(0)} KB -> public/data/money/${code}/${sharp ? '' : ' (copied as-is: sharp not installed)'}`);
+  }
+  // Folders of currencies no longer in the overrides file are stale.
+  if (!ONLY && await exists(MONEY_DIR)) {
+    for (const d of await readdir(MONEY_DIR)) if (!codesHere.includes(d)) { await rm(join(MONEY_DIR, d), { recursive: true, force: true }); console.log(`removed stale public/data/money/${d}`); }
+  }
+  let total = 0;
+  if (await exists(MONEY_DIR)) for (const d of await readdir(MONEY_DIR)) for (const f of await readdir(join(MONEY_DIR, d))) total += (await stat(join(MONEY_DIR, d, f))).size;
+  console.log(`public/data/money/: ${(total / 1024).toFixed(0)} KB in all`);
+}
+
+const currencies = OVERRIDES_ONLY ? previous.currencies : Object.fromEntries(codeList.map((c) => [c, result[c]]));
+await applyOverrides(currencies);
+
+// ---------------------------------------------------------------------------
+// 8. Write, keeping the file under MAX_BYTES.
 
 const out = {
   built: today(),
-  source: 'Wikidata (CC0), Wikimedia Commons (per-file licenses)',
+  source: 'Wikidata (CC0), Wikimedia Commons (per-file licenses), issuer files with published reuse terms (data/overrides/money.json)',
   attribution: {
     data: 'Currency names and issuers: Wikidata (CC0). Link https://www.wikidata.org/wiki/<qid>.',
     images: 'Each file has its own license on Wikimedia Commons (CC BY, CC BY-SA, public domain, or copyrighted with reproduction permitted by the issuer). Show `license`, `artist` and link the file page https://commons.wikimedia.org/wiki/File:<file>. Banknote designs belong to their issuers.',
+    overrides: 'Entries with `local` are files served from public/data/<local>, taken from an issuer with published reuse terms (or a written authorization) listed in data/overrides/money.json. Show `license` and `credit` and link `terms`. They come first and are the current issue (`historical: false`). A currency with any such entry has `overrides: true` and `terms`.',
   },
   notes: 'Files are what Commons has filed under the currency\'s banknote and coin categories (newest uploads and best title matches, one per denomination, width >= 600). This is not always the current series: when a central bank keeps its copyright, Commons mostly holds older issues. `year` and `series` are read from the file title when it states them. Thumbnail: https://commons.wikimedia.org/wiki/Special:FilePath/<encodeURIComponent(file)>?width=800',
-  currencies: Object.fromEntries(codeList.map((c) => [c, result[c]])),
+  currencies,
 };
 
 let json = JSON.stringify(out);
@@ -760,7 +980,9 @@ if (Buffer.byteLength(json) > MAX_BYTES) {
 }
 for (const cap of [[6, 4], [5, 3], [4, 2]]) {
   if (Buffer.byteLength(json) <= MAX_BYTES) break;
-  for (const c of Object.values(out.currencies)) { c.banknotes = c.banknotes.slice(0, cap[0]); c.coins = c.coins.slice(0, cap[1]); }
+  // Override files are never cut: the cap applies to the Commons part.
+  const keep = (list, n) => [...list.filter((f) => f.local), ...list.filter((f) => !f.local).slice(0, n)];
+  for (const c of Object.values(out.currencies)) { c.banknotes = keep(c.banknotes, cap[0]); c.coins = keep(c.coins, cap[1]); }
   json = JSON.stringify(out);
   console.log(`over cap: ${cap[0]} notes / ${cap[1]} coins`);
 }

@@ -7,6 +7,8 @@ import { commonsPage, commonsThumb } from '../live/sources.js';
 
 // Today's notes first; anything dated before 1990 or labeled specimen or
 // historical waits behind a toggle (the future time slider's first job).
+// An entry with `local` is an issuer's own file of the current issue
+// (data/overrides/money.json): current whatever its year says.
 export function splitBills(bills) {
   const current = [];
   const old = [];
@@ -14,6 +16,7 @@ export function splitBills(bills) {
     const title = `${b.file || ''} ${b.series || ''}`;
     // Diagrams of a note's parts and security features are not notes.
     if (/partes de|diagram|esquema|elementos de seguridad|security feature|seguridad\d|hilo din|watermark|marca de agua|detalle|detail of|\.tif$|\.gif$/i.test(title)) continue;
+    if (b.local) { current.push(b); continue; }
     const years = [...title.matchAll(/\b(1[6-9]\d\d|20\d\d)\b/g)].map((x) => Number(x[1]));
     const year = b.year || (years.length ? Math.max(...years) : null);
     const flagged = /specimen|histor|antigu|\bold\b|obsolet|demonetiz|emergency|provisional|revoluci|local issue|banco yucateco|comisi[oó]n reguladora/i.test(title);
@@ -21,10 +24,16 @@ export function splitBills(bills) {
     else current.push(b);
   }
   // "Uncertain" when nothing proves a note from this century exists in the set:
-  // the card then says Commons may not hold the current series.
-  const uncertain = !bills.some((b) => (b.year && b.year >= 2000) || /current|polymer|europa|new|20[12]\d/i.test(`${b.series || ''} ${b.file || ''}`));
+  // the card then says Commons may not hold the current series. An issuer's
+  // own file settles it.
+  const uncertain = !bills.some((b) => b.local || (b.year && b.year >= 2000) || /current|polymer|europa|new|20[12]\d/i.test(`${b.series || ''} ${b.file || ''}`));
   return { current, old, uncertain };
 }
+
+// Image and credit link of a note or coin: an issuer's file served from
+// public/data/, or the Commons thumbnail and file page.
+const imageSrc = (f, base, width) => (f.local ? `${base}data/${f.local}` : commonsThumb(f.file, width));
+const creditHref = (f) => f.terms || commonsPage(f.file);
 
 // Real banknotes and coins from Wikimedia Commons. One rectangle for the
 // bill (a slideshow across denominations), one circle beside it for the
@@ -54,20 +63,21 @@ export function renderMoney(m) {
   const coins = (cur.coins || []).slice(0, 10);
   const cidx = coins.length ? (m.tick4 || 0) % coins.length : 0;
   const coin = coins[cidx];
+  const base = m.base ?? import.meta.env.BASE_URL;
   return html`
     <div class="money-row">
       ${bills.length ? html`
       <div class="money" tabindex="0" aria-label=${`${t(lang, 'moneyBills')}: ${name}`}>
-        ${bills.map((b, i) => html`<img class=${i === idx ? 'on' : ''} src=${commonsThumb(b.file, 900)} alt=${`${b.denomination || ''} ${name}`} loading=${i === idx ? 'eager' : 'lazy'}>`)}
+        ${bills.map((b, i) => html`<img class=${i === idx ? 'on' : ''} src=${imageSrc(b, base, 900)} alt=${`${b.denomination || ''} ${name}`} loading=${i === idx ? 'eager' : 'lazy'}>`)}
         ${bills.length > 1 ? html`<div class="dots">${bills.map((_, i) => html`<i class=${i === idx ? 'on' : ''}></i>`)}</div>
           <button class="step l" aria-label="prev" @click=${() => on('money-step', -1)}>‹</button>
           <button class="step r" aria-label="next" @click=${() => on('money-step', 1)}>›</button>` : nothing}
         <div class="label"><span><b>${bill.denomination ? `${bill.denomination} ` : ''}${name}</b>${bill.year || bill.series ? ` · ${[bill.series, bill.year].filter(Boolean).join(' ')}` : ''}${rate ? html`<br>${rate}` : nothing}</span>
-          <a class="credit" style="position:static;background:none;padding:0" href=${commonsPage(bill.file)} target="_blank" rel="noreferrer">${bill.license || 'Commons'}</a></div>
+          <a class="credit" style="position:static;background:none;padding:0" href=${creditHref(bill)} target="_blank" rel="noreferrer">${bill.license || 'Commons'}</a></div>
       </div>` : nothing}
       ${coin ? html`
-      <a class="coin" href=${commonsPage(coin.file)} target="_blank" rel="noreferrer" title=${`${coin.denomination ? `${coin.denomination} ` : ''}${name}${coin.license ? ` · ${coin.license}` : ''}`} aria-label=${t(lang, 'moneyCoins')}>
-        ${coins.map((c, i) => html`<img class=${i === cidx ? 'on' : ''} src=${commonsThumb(c.file, 320)} alt="" loading=${i === cidx ? 'eager' : 'lazy'}>`)}
+      <a class="coin" href=${creditHref(coin)} target="_blank" rel="noreferrer" title=${`${coin.denomination ? `${coin.denomination} ` : ''}${name}${coin.license ? ` · ${coin.license}` : ''}`} aria-label=${t(lang, 'moneyCoins')}>
+        ${coins.map((c, i) => html`<img class=${i === cidx ? 'on' : ''} src=${imageSrc(c, base, 320)} alt="" loading=${i === cidx ? 'eager' : 'lazy'}>`)}
         <span class="cap">${coin.denomination || ''}</span>
       </a>` : nothing}
     </div>
