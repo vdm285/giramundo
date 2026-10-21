@@ -31,21 +31,27 @@
 //   as international and skipped. Instruments are subclasses of "musical
 //   instrument" (or instances of "type of musical instrument") with the same
 //   origin. Hand curation goes in data/overrides/music.json, never here.
-// - People are "humans whose country of citizenship (P27) is this country",
-//   ranked by how many Wikipedias have an article about them (sitelinks).
-//   That favors footballers, presidents and pop singers over scientists and
-//   painters, and it includes naturalized citizens (Wikidata gives Trotsky
-//   and Buñuel Mexican citizenship, and Cortés too). People whose recorded
-//   birthplace (P19 -> P17) lies in another country sort after the rest, which
-//   keeps them in the list without letting them lead it. To change the mix,
-//   edit `rankPeople` below (for example weight occupations) rather than
-//   editing the output.
-// - The occupation shown is the one with Preferred rank when an editor set
-//   one, else one the Wikidata description names, else the person's
-//   occupation whose own item has the most sitelinks (so "writer" over
-//   "diplomat"). SPARQL does not expose statement order, so "first P106"
-//   cannot be read literally; a few people still get "actor" or "writer"
-//   where a human would say "singer" or "philosopher".
+// - People: the pool is the 150 citizens (P27) with the most sitelinks (how
+//   many Wikipedias have an article about them) plus up to 40 people born in
+//   the country before 1900 who hold the citizenship of a predecessor state
+//   (Tolstoy: Russian Empire; Goethe: Saxe-Weimar; Moctezuma: Aztec Empire).
+//   Twelve are chosen by buckets (TARGETS: arts 4, science 2, sports 2,
+//   politics 2, thought 1, other 1; each bucket by sitelinks, a short bucket
+//   gives its slots to the best remaining) with at least three born before
+//   1900 and three after 1940 when such people exist (`selectPeople`). The
+//   domain comes from the occupations' place in Wikidata's class tree
+//   (ANCHORS). Sitelinks still favor footballers, presidents and pop singers
+//   within a bucket, and the pool includes naturalized citizens (Wikidata
+//   gives Trotsky and Buñuel Mexican citizenship, and Cortés too): people
+//   whose recorded birthplace (P19 -> P17) lies in another country only fill
+//   a gap natives leave. Hand curation goes in data/overrides/people.json
+//   (Q-ids to include or exclude), never here or in the output.
+// - The occupation shown is one from the person's domain: the one with
+//   Preferred rank when an editor set one, else one the Wikidata description
+//   names, else the person's occupation whose own item has the most sitelinks
+//   (so "writer" over "diplomat"). SPARQL does not expose statement order, so
+//   "first P106" cannot be read literally; a few people still get "actor" or
+//   "writer" where a human would say "singer" or "philosopher".
 // - Speaker counts are Wikidata's P1098 on the language item (preferred rank,
 //   else the most recent point in time, else the largest). They are global,
 //   not per country: Spanish shows ~485 million under Mexico and under Spain.
@@ -59,12 +65,21 @@ import { root, cacheDir, sparql as sparqlRaw, getJsonCached, loadFacts, today } 
 
 const OUT = join(root, 'public/data/culture.json');
 const MUSIC_OVERRIDES = join(root, 'data/overrides/music.json');
+const PEOPLE_OVERRIDES = join(root, 'data/overrides/people.json');
 const MAX_BYTES = 1300 * 1024;
 const MAX_PEOPLE = 12;
-const MIN_WITH_IMAGE = 6;
-const CANDIDATES = 40; // per country, before the image filter
+const MAX_NO_IMAGE = 2; // of the 12, at most this many without a portrait
+const CANDIDATES = 150; // citizens per country, by sitelinks
+const BIRTH_CANDIDATES = 40; // pre-1900 people born in the country without its citizenship
 const FAMOUS_LINKS = 30; // one global range query covers everyone above this
 const DETAIL_BATCH = 200;
+// Bucket targets per country, filled in this order; a bucket short of
+// candidates gives its slots to the best remaining by sitelinks.
+const TARGETS = [['arts', 4], ['science', 2], ['sports', 2], ['politics', 2], ['thought', 1], ['other', 1]];
+const OLD_BEFORE = 1900; // "earlier epoch": born before this
+const RECENT_AFTER = 1940; // "recent epoch": born after this
+const MIN_OLD = 3;
+const MIN_RECENT = 3;
 const MAX_GENRES = 12;
 const MAX_INSTRUMENTS = 6;
 const MUSIC_DESC = 60; // chars per description, per language
@@ -677,9 +692,10 @@ function musicFor(iso) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. People, step one: candidates per country (humans with P27 = country,
-//    skipping deprecated and ended citizenships so Ishiguro is not Japanese
-//    and Soviet citizens are not Russian; the CANDIDATES most-linked). Sorting a big country's citizens by
+// 4. People, step one: candidates per country.
+//    (a) Citizens: humans with P27 = country, skipping deprecated and ended
+//    citizenships so Ishiguro is not Japanese and Soviet citizens are not
+//    Russian; the CANDIDATES most-linked. Sorting a big country's citizens by
 //    sitelinks is the heavy part (the United States alone takes ~35 s), so a
 //    single range query over "everyone with at least FAMOUS_LINKS sitelinks"
 //    (hint:rangeSafe lets Blazegraph walk the sitelinks index) covers the big
@@ -687,10 +703,30 @@ function musicFor(iso) {
 //    people from it run their own ORDER BY query, and those are the small
 //    countries where it is quick. A country whose query fails keeps an empty
 //    list and the run goes on.
+//    (b) Born here before 1900: Wikidata gives Tolstoy the Russian Empire, Goethe
+//    the Duchy of Saxe-Weimar and Moctezuma the Aztec Empire as citizenship,
+//    never the present state, so a citizens-only list of Russia, Germany or
+//    Mexico has nobody from before 1900. One global range query adds the
+//    famous people born (P19 -> P17) in the country before OLD_BEFORE who do
+//    not hold its citizenship but hold that of a state located in it (P17) or
+//    whose capital (P36) lies in it, or hold none at all (Pakal, Rasputin).
+//    That keeps Kant and Hilbert (born in Königsberg, Prussian) out of Russia
+//    and Hidalgo (born in New Spain, filed as Spanish) out of Mexico; an
+//    override can bring the latter in. Up to BIRTH_CANDIDATES per country.
+//    (c) data/overrides/people.json { ISO2: { include: [qid], exclude: [qid] } }:
+//    included items join the pool (and are placed first), excluded ones are
+//    dropped wherever they came from. Q-ids only, never names.
 
-const candidates = new Map(); // iso -> [{qid, links}]
+const candidates = new Map(); // iso -> [{qid, links, viaBirth?, curated?}]
 const failed = [];
+let peopleOverrides = {};
+try { peopleOverrides = JSON.parse(await readFile(PEOPLE_OVERRIDES, 'utf8')); } catch { /* optional */ }
 {
+  const add = (iso, entry) => {
+    const list = candidates.get(iso) || [];
+    if (!list.some((p) => p.qid === entry.qid)) list.push(entry);
+    candidates.set(iso, list);
+  };
   const rows = await sparql(`
 SELECT ?p ?c ?links WHERE {
   hint:Query hint:optimizer "None" .
@@ -704,9 +740,7 @@ SELECT ?p ?c ?links WHERE {
   for (const b of rows) {
     const iso = qToIso.get(qid(v(b, 'c')));
     if (!iso) continue;
-    const list = candidates.get(iso) || [];
-    list.push({ qid: qid(v(b, 'p')), links: Number(v(b, 'links')) });
-    candidates.set(iso, list);
+    add(iso, { qid: qid(v(b, 'p')), links: Number(v(b, 'links')) });
   }
   for (const list of candidates.values()) list.sort((a, b) => b.links - a.links).splice(CANDIDATES);
 
@@ -727,6 +761,56 @@ SELECT ?p ?links WHERE {
       candidates.set(c.iso2, []);
     }
   }
+
+  // (b) Born here before OLD_BEFORE, citizen of a predecessor state or of none.
+  let birthRows = [];
+  try {
+    birthRows = await sparql(`
+SELECT ?p ?c ?links WHERE {
+  hint:Query hint:optimizer "None" .
+  ?p wikibase:sitelinks ?links . hint:Prior hint:rangeSafe true .
+  FILTER(?links >= ${FAMOUS_LINKS})
+  ?p wdt:P31 wd:Q5 .
+  ?p wdt:P569 ?born . FILTER(YEAR(?born) < ${OLD_BEFORE})
+  ?p wdt:P19 ?place . ?place wdt:P17 ?c . ?c wdt:P297 ?iso .
+  FILTER NOT EXISTS { ?p wdt:P27 ?c }
+  FILTER(
+    NOT EXISTS { ?p wdt:P27 ?any } ||
+    EXISTS { ?p wdt:P27 ?x . ?x wdt:P17 ?c } ||
+    EXISTS { ?p wdt:P27 ?x . ?x wdt:P36 ?cap . ?cap wdt:P17 ?c }
+  )
+}`, `born before ${OLD_BEFORE} in a predecessor state`);
+  } catch (err) {
+    console.error(`people born before ${OLD_BEFORE}: skipped (${err.message})`);
+  }
+  const births = new Map(); // iso -> [{qid, links}]
+  for (const b of birthRows) {
+    const iso = qToIso.get(qid(v(b, 'c')));
+    if (!iso) continue;
+    const list = births.get(iso) || [];
+    if (!list.some((p) => p.qid === qid(v(b, 'p')))) list.push({ qid: qid(v(b, 'p')), links: Number(v(b, 'links')) });
+    births.set(iso, list);
+  }
+  let viaBirth = 0;
+  for (const [iso, list] of births) {
+    for (const p of list.sort((a, b) => b.links - a.links).slice(0, BIRTH_CANDIDATES)) {
+      add(iso, { ...p, viaBirth: true });
+      viaBirth += 1;
+    }
+  }
+  console.log(`people: ${viaBirth} pre-${OLD_BEFORE} people born in ${births.size} countries added through their birthplace`);
+
+  // (c) Overrides: included people join the pool with links 0 (filled from the
+  // details below); excluded ones are removed at selection time.
+  for (const c of matched) {
+    for (const q of peopleOverrides[c.iso2]?.include || []) {
+      if (!/^Q\d+$/.test(q)) { console.warn(`people override ${c.iso2}: ${q} is not a Q-id, skipped`); continue; }
+      const list = candidates.get(c.iso2) || [];
+      const had = list.find((p) => p.qid === q);
+      if (had) had.curated = true;
+      else add(c.iso2, { qid: q, links: 0, curated: true });
+    }
+  }
 }
 
 // Does the description name this occupation? Every word of the label with
@@ -736,12 +820,12 @@ SELECT ?p ?links WHERE {
 // occupations are usually described with another word ("president" for a
 // politician, "filmmaker" for a film director); those are listed here.
 const IMPLIED = new Map([
-  ['Q82955', /president|prime minister|chancellor|senator|governor|statesm|minister|politic|primer ministro|canciller|senador|gobernador|ministr/], // politician
-  ['Q116', /(emperor|empress|king|queen|monarch|sultan|emir|emperador|emperatriz|rey|reina|monarca|sultán)/], // monarch
-  ['Q33999', /(actress|actriz)/], // actor
-  ['Q36180', /(author|novelist|essayist|autor|autora|novelista|ensayista)/], // writer
+  ['Q82955', /president|prime minister|chancellor|senator|governor|statesm|minister|politic|general secretary|secretary.general|paramount leader|chairman|dictator|caudillo|head of state|primer ministro|canciller|senador|gobernador|ministr|secretario general|dictador|jefe de estado|líder/], // politician
+  ['Q116', /(emperor|empress|king|queen|monarch|sultan|emir|emperador|emperatriz|rey|reina|monarca|sultán)/], // monarch
+  ['Q33999', /(actress|actriz)/], // actor
+  ['Q36180', /(author|novelist|essayist|autor|autora|novelista|ensayista)/], // writer
   ['Q2526255', /filmmaker|film director|cineasta|director de cine/], // film director
-  ['Q177220', /(singer|cantante)/], // singer
+  ['Q177220', /(singer|cantante)/], // singer
   ['Q937857', /footballer|soccer|futbolista/], // association football player
   ['Q4964182', /philosopher|filósof/], // philosopher
   ['Q1028181', /painter|pintor/], // painter
@@ -749,25 +833,70 @@ const IMPLIED = new Map([
   ['Q47064', /military|militar/], // military personnel
   ['Q189290', /military|militar/], // military officer
 ]);
-function mentioned(q, label, desc) {
-  if (!label || !desc) return false;
-  const all = `${desc.es || ''} ${desc.en || ''}`.toLowerCase();
-  if (IMPLIED.get(q)?.test(all)) return true;
-  for (const lang of ['es', 'en']) {
+// Returns where the mention starts (the Spanish description first, the
+// English one offset by 1000), or -1: "cantante y actriz" names the singer
+// before the actress, and the earlier mention wins the displayed occupation.
+function mentionPos(q, label, desc) {
+  if (!label || !desc) return -1;
+  let best = -1;
+  const consider = (pos, offset) => { if (pos >= 0 && (best < 0 || pos + offset < best)) best = pos + offset; };
+  for (const [i, lang] of ['es', 'en'].entries()) {
     const text = (desc[lang] || '').toLowerCase();
+    if (!text) continue;
+    const implied = IMPLIED.get(q)?.exec(text);
+    if (implied) consider(implied.index, i * 1000);
     const words = (label[lang] || '').toLowerCase().split(/[\s-]+/).filter((w) => w.length >= 4);
-    if (words.length && words.every((w) => text.includes(w.slice(0, Math.max(4, w.length - 2))))) return true;
+    const stems = words.map((w) => w.slice(0, Math.max(4, w.length - 2)));
+    if (stems.length && stems.every((s) => text.includes(s))) consider(Math.min(...stems.map((s) => text.indexOf(s))), i * 1000);
   }
-  return false;
+  return best;
 }
+const mentioned = (q, label, desc) => mentionPos(q, label, desc) >= 0;
 
 // ---------------------------------------------------------------------------
-// 5. People, step two: details for every candidate, batched by VALUES.
-//    Two flat queries per batch (labels, descriptions, image, dates, birth
-//    countries via P19 -> P17; then occupations with their rank and
-//    sitelinks). Blazegraph throws a StackOverflowError when these OPTIONALs
-//    are combined with GROUP BY / GROUP_CONCAT, so rows are merged in JS: the
-//    earliest date, the first image, every birth country.
+// 4b. Domains. Every occupation (P106) in the pool is mapped to one of six
+//     domains through the Wikidata class tree: an occupation that is one of
+//     the anchor items below, or a subclass (P279*) of one, belongs to that
+//     anchor's domain. When an occupation sits under anchors of several
+//     domains (a professional wrestler is both an athlete and a performing
+//     artist; a historian is a social scientist) the first domain in
+//     DOMAIN_PRECEDENCE wins, except that the occupation's own anchor entry
+//     wins over anything inherited (a television presenter is "other" even
+//     though Wikidata files it under artist). Occupations under "criminal"
+//     (drug lords, gangsters, serial killers, terrorists) make the whole
+//     person ineligible: the row is "people who left a mark", and a card with
+//     a drug lord next to a poet is not what it is for; an override can put
+//     one back. Anything unmapped counts as "other" only when the person has
+//     no mapped occupation at all.
+
+const ANCHORS = {
+  arts: ['Q483501', 'Q36180', 'Q639669', 'Q33999', 'Q2526255', 'Q42973', 'Q5716684', 'Q177220', 'Q36834', 'Q1028181', 'Q49757', 'Q28389', 'Q3282637', 'Q245068', 'Q33231', 'Q1281618', 'Q3501317', 'Q2490358', 'Q158852', 'Q214917', 'Q6625963', 'Q715301', 'Q644687', 'Q2059704', 'Q753110', 'Q183945', 'Q1414443', 'Q822146', 'Q130857', 'Q337084', 'Q2488257', 'Q11774202', 'Q4263842', 'Q4164507', 'Q1350157', 'Q333634', 'Q329439', 'Q627325', 'Q7541856', 'Q2079935'],
+  // artist, writer, musician, actor, film director, architect, dancer, singer, composer, painter, poet, screenwriter, film producer, comedian, photographer, sculptor, fashion designer, choreographer, conductor, playwright, novelist, comics artist, illustrator, television director, songwriter, record producer, filmmaker, lyricist, disc jockey, drag queen, magician, essayist, literary critic, art critic, music critic, translator, engraver, graphic designer, ceramicist, architectural drafter
+  science: ['Q901', 'Q81096', 'Q39631', 'Q170790', 'Q205375', 'Q11900058', 'Q11631', 'Q1650915', 'Q593644', 'Q169470', 'Q864503', 'Q11063', 'Q82594', 'Q774306', 'Q212980', 'Q2374149', 'Q901402', 'Q1734662', 'Q2095549', 'Q3621491', 'Q18805', 'Q254651', 'Q15954519', 'Q121594'],
+  // scientist, engineer, physician, mathematician, inventor, explorer, astronaut, researcher, chemist, physicist, biologist, astronomer, computer scientist, surgeon, psychologist, botanist, geographer, cartographer, aircraft pilot, archaeologist, naturalist, navigator, alchemist, professor
+  sports: ['Q2066131', 'Q50995749', 'Q41583', 'Q937857', 'Q10349745', 'Q10841764', 'Q13474373', 'Q11338576', 'Q10873124', 'Q9149093', 'Q549322', 'Q846750', 'Q11124885'],
+  // athlete, sportsperson, coach, association football player, racing driver, Formula One driver, professional wrestler, boxer, chess player, mountaineer, bullfighter, jockey, martial artist
+  politics: ['Q82955', 'Q47064', 'Q116', 'Q48352', 'Q2285706', 'Q3242115', 'Q2259532', 'Q193391', 'Q16533', 'Q2304859', 'Q2478141', 'Q1402561', 'Q126236', 'Q189290', 'Q372436', 'Q15253558', 'Q212238', 'Q19546', 'Q43115', 'Q219477', 'Q15627169', 'Q37110', 'Q39018', 'Q12097', 'Q38142', 'Q42603', 'Q29182', 'Q4991371', 'Q220098', 'Q125482', 'Q133485', 'Q733786', 'Q191808', 'Q15995642', 'Q2747456', 'Q863048', 'Q719039', 'Q9352089', 'Q10729326', 'Q1097498', 'Q104555', 'Q5784340', 'Q83307', 'Q203184', 'Q368800', 'Q599151'],
+  // politician, military personnel, monarch, head of state, head of government, revolutionary, cleric, diplomat, judge, sovereign, aristocrat, military leader, conquistador, military officer, statesperson, activist, civil servant, pope, saint, missionary, trade unionist, pharaoh, emperor, king, samurai, priest, bishop, soldier, warlord, imam, rabbi, monk, nun, religious leader, prince, princess, queen consort, spy, pirate, ruler (two items), consort, minister, First Lady (two items), official
+  thought: ['Q4964182', 'Q188094', 'Q201788', 'Q1930187', 'Q1234713', 'Q2306091', 'Q4773904', 'Q14467526', 'Q1238570', 'Q3410028', 'Q1371378', 'Q3330547', 'Q12859263', 'Q58968'],
+  // philosopher, economist, historian, journalist, theologian, sociologist, anthropologist, linguist, political scientist, psychoanalyst, ethnologist, chronicler, orator, intellectual
+  other: ['Q43845', 'Q131524', 'Q4610556', 'Q947873', 'Q40348', 'Q37226', 'Q1622272', 'Q3499072', 'Q156839', 'Q18581305', 'Q17125263', 'Q488111', 'Q2516866', 'Q215536', 'Q512314', 'Q211236', 'Q44508716', 'Q131512', 'Q45199', 'Q12773225', 'Q2986228'],
+  // businessperson, entrepreneur, model, television presenter, lawyer, teacher, university teacher, chef, cook, beauty pageant contestant, YouTuber, pornographic film actor, publisher, merchant, socialite, celebrity, television personality, farmer, sailor, slave, sports commentator
+  crime: ['Q2159907', 'Q484188', 'Q2543769', 'Q10384029', 'Q46961', 'Q1404030', 'Q931260', 'Q12414919', 'Q254508'],
+  // criminal, serial killer, drug lord, drug trafficker, gangster, mobster, murderer, terrorist, outlaw
+};
+const DOMAIN_PRECEDENCE = ['crime', 'thought', 'sports', 'politics', 'arts', 'science', 'other'];
+const DOMAINS = TARGETS.map(([d]) => d);
+const anchorDomain = new Map(Object.entries(ANCHORS).flatMap(([d, list]) => list.map((q) => [q, d])));
+
+// ---------------------------------------------------------------------------
+// 5. People, step two: details for every candidate, batched by VALUES. Two
+//    flat queries per batch (labels, descriptions, image, dates, sitelinks,
+//    birth countries via P19 -> P17; then occupation items with their rank).
+//    Blazegraph throws a StackOverflowError when these OPTIONALs are combined
+//    with GROUP BY / GROUP_CONCAT, so rows are merged in JS: the earliest
+//    date, the first image, every birth country. Occupation labels are
+//    fetched later, only for the people kept.
 
 const details = new Map(); // qid -> {...}
 {
@@ -779,7 +908,7 @@ const details = new Map(); // qid -> {...}
     let jobRows;
     try {
       rows = await sparql(`
-SELECT ?p ?les ?len ?lmul ?des ?den ?img ?born ?died ?bc WHERE {
+SELECT ?p ?les ?len ?lmul ?des ?den ?img ?born ?died ?links ?bc WHERE {
   VALUES ?p { ${values} }
   OPTIONAL { ?p rdfs:label ?les FILTER(LANG(?les) = "es") }
   OPTIONAL { ?p rdfs:label ?len FILTER(LANG(?len) = "en") }
@@ -789,17 +918,14 @@ SELECT ?p ?les ?len ?lmul ?des ?den ?img ?born ?died ?bc WHERE {
   OPTIONAL { ?p wdt:P18 ?img }
   OPTIONAL { ?p wdt:P569 ?born }
   OPTIONAL { ?p wdt:P570 ?died }
+  OPTIONAL { ?p wikibase:sitelinks ?links }
   OPTIONAL { ?p wdt:P19 ?birthplace . ?birthplace wdt:P17 ?bc }
 }`, `details ${i + 1}/${batches.length}`);
       jobRows = await sparql(`
-SELECT ?p ?job ?jrank ?jlinks ?jes ?jen ?jmul WHERE {
+SELECT ?p ?job ?jrank WHERE {
   VALUES ?p { ${values} }
   ?p p:P106 ?js . ?js ps:P106 ?job ; wikibase:rank ?jrank .
   FILTER(?jrank != wikibase:DeprecatedRank)
-  OPTIONAL { ?job wikibase:sitelinks ?jlinks }
-  OPTIONAL { ?job rdfs:label ?jes FILTER(LANG(?jes) = "es") }
-  OPTIONAL { ?job rdfs:label ?jen FILTER(LANG(?jen) = "en") }
-  OPTIONAL { ?job rdfs:label ?jmul FILTER(LANG(?jmul) = "mul") }
 }`, `occupations ${i + 1}/${batches.length}`);
     } catch (err) {
       console.error(`details ${i + 1}: skipped (${err.message})`);
@@ -808,58 +934,216 @@ SELECT ?p ?job ?jrank ?jlinks ?jes ?jen ?jmul WHERE {
     const minYear = (a, b) => (a === null ? b : b === null ? a : Math.min(a, b));
     for (const b of rows) {
       const q = qid(v(b, 'p'));
-      const d = details.get(q) || { label: null, desc: null, image: null, born: null, died: null, births: new Set(), jobs: new Map() };
+      const d = details.get(q) || { label: null, desc: null, image: null, born: null, died: null, links: 0, births: new Set(), jobs: new Map() };
       d.label ||= bi(v(b, 'les'), v(b, 'len'), v(b, 'lmul'));
       d.desc ||= bi(v(b, 'des'), v(b, 'den'));
       d.image ||= commonsName(v(b, 'img'));
       d.born = minYear(d.born, year(v(b, 'born')));
       d.died = minYear(d.died, year(v(b, 'died')));
+      d.links = Number(v(b, 'links')) || d.links;
       if (v(b, 'bc')) d.births.add(qid(v(b, 'bc')));
       details.set(q, d);
     }
     for (const b of jobRows) {
       const d = details.get(qid(v(b, 'p')));
-      if (!d) continue;
-      const label = bi(v(b, 'jes'), v(b, 'jen'), v(b, 'jmul'));
-      if (!label) continue;
-      d.jobs.set(qid(v(b, 'job')), {
-        label,
-        preferred: (v(b, 'jrank') || '').endsWith('PreferredRank'),
-        links: Number(v(b, 'jlinks')) || 0,
-      });
+      const job = qid(v(b, 'job'));
+      if (!d || !/^Q\d+$/.test(job)) continue; // "unknown value" occupations are blank nodes
+      d.jobs.set(job, { preferred: (v(b, 'jrank') || '').endsWith('PreferredRank') });
     }
   }
-  // One occupation per person: Preferred rank first, then one the Wikidata
-  // description itself names ("film director" for Kurosawa, whose best-known
-  // occupation item would otherwise be "writer"), then the best-known one.
-  for (const d of details.values()) {
-    d.births = [...d.births];
-    const score = ([q, j]) => (j.preferred ? 2000 : 0) + (mentioned(q, j.label, d.desc) ? 1000 : 0) + j.links;
-    d.job = [...d.jobs.entries()].sort((a, b) => score(b) - score(a))[0]?.[1].label || null;
-    delete d.jobs;
-  }
+  for (const d of details.values()) d.births = [...d.births];
 }
 
-// Rank a country's candidates: born here (or birthplace unknown) first, then
-// by sitelinks. Keep only people with a photo when that leaves at least
-// MIN_WITH_IMAGE; otherwise let the ones without a photo fill the list.
-function rankPeople(iso, countryQ) {
-  const list = (candidates.get(iso) || [])
-    .map((p) => ({ ...p, ...details.get(p.qid) }))
-    .filter((p) => p.label);
+// Occupation -> domain, through P279* to the anchors, in VALUES batches; and
+// every occupation's labels and sitelinks (one cheap query per batch), so the
+// description can be matched against occupation names when voting below.
+const jobDomain = new Map(); // job qid -> domain | 'crime'
+const jobInfo = new Map(); // job qid -> { label, links }
+{
+  const jobs = [...new Set([...details.values()].flatMap((d) => [...d.jobs.keys()]))];
+  const anchors = [...anchorDomain.keys()];
+  const inherited = new Map(); // job -> Set(domain)
+  const batches = chunk(jobs, 200);
+  // A batch WDQS cuts off ("terminated", a 400) is retried in halves down to
+  // 25 occupations, so one occupation with a huge class tree costs its
+  // neighbors nothing.
+  const classify = async (list, what) => {
+    try {
+      return await sparql(`
+SELECT DISTINCT ?job ?a WHERE {
+  VALUES ?job { ${list.map(wd).join(' ')} }
+  ?job wdt:P279* ?a .
+  VALUES ?a { ${anchors.map(wd).join(' ')} }
+}`, what);
+    } catch (err) {
+      if (list.length <= 25) { console.error(`${what}: skipped (${err.message})`); return []; }
+      const half = Math.ceil(list.length / 2);
+      console.error(`${what}: ${err.message}; retrying in halves`);
+      return [...await classify(list.slice(0, half), `${what}a`), ...await classify(list.slice(half), `${what}b`)];
+    }
+  };
+  for (const [i, batch] of batches.entries()) {
+    const rows = await classify(batch, `occupation classes ${i + 1}/${batches.length}`);
+    for (const b of rows) {
+      const j = qid(v(b, 'job'));
+      const set = inherited.get(j) || new Set();
+      set.add(anchorDomain.get(qid(v(b, 'a'))));
+      inherited.set(j, set);
+    }
+    let labelRows;
+    try {
+      labelRows = await sparql(`
+SELECT ?job ?jlinks ?jes ?jen ?jmul WHERE {
+  VALUES ?job { ${batch.map(wd).join(' ')} }
+  OPTIONAL { ?job wikibase:sitelinks ?jlinks }
+  OPTIONAL { ?job rdfs:label ?jes FILTER(LANG(?jes) = "es") }
+  OPTIONAL { ?job rdfs:label ?jen FILTER(LANG(?jen) = "en") }
+  OPTIONAL { ?job rdfs:label ?jmul FILTER(LANG(?jmul) = "mul") }
+}`, `occupation labels ${i + 1}/${batches.length}`);
+    } catch (err) {
+      console.error(`occupation labels ${i + 1}: skipped (${err.message})`);
+      labelRows = [];
+    }
+    for (const b of labelRows) {
+      const label = bi(v(b, 'jes'), v(b, 'jen'), v(b, 'jmul'));
+      if (label) jobInfo.set(qid(v(b, 'job')), { label, links: Number(v(b, 'jlinks')) || 0 });
+    }
+  }
+  let mapped = 0;
+  for (const j of jobs) {
+    const own = anchorDomain.get(j);
+    const dom = own || DOMAIN_PRECEDENCE.find((d) => inherited.get(j)?.has(d)) || null;
+    if (dom) { jobDomain.set(j, dom); mapped += 1; }
+  }
+  console.log(`people: ${jobs.length} distinct occupations, ${mapped} mapped to a domain`);
+}
+
+// One domain per person: each mapped occupation votes for its domain (1, plus
+// 2 for Preferred rank, plus 4 when the Wikidata description names it:
+// "President of Brazil" for a politician who was also a physician and a
+// writer, "actress" for actor); ties go to the rarer domain. Unmapped
+// occupations only count, as "other", when nothing is mapped (a person whose
+// only occupations are carpenter and shipwright). Any occupation under
+// "criminal" marks the person out.
+const PERSON_TIE = ['sports', 'thought', 'science', 'arts', 'politics', 'other'];
+for (const d of details.values()) {
+  const votes = new Map();
+  d.crime = false;
+  let unmapped = 0;
+  for (const [q, j] of d.jobs) {
+    const dom = jobDomain.get(q);
+    if (dom === 'crime') { d.crime = true; continue; }
+    if (!dom) { unmapped += 1; continue; }
+    const w = 1 + (j.preferred ? 2 : 0) + (mentioned(q, jobInfo.get(q)?.label, d.desc) ? 4 : 0);
+    votes.set(dom, (votes.get(dom) || 0) + w);
+  }
+  if (!votes.size && unmapped) votes.set('other', unmapped);
+  d.domain = [...votes.entries()].sort((a, b) => b[1] - a[1] || PERSON_TIE.indexOf(a[0]) - PERSON_TIE.indexOf(b[0]))[0]?.[0] || 'other';
+}
+
+// ---------------------------------------------------------------------------
+// 5b. Selection per country. Rank: born here (or birthplace unknown) first,
+//     then sitelinks. Then, with natives only: overrides first; each bucket of
+//     TARGETS takes its best; the remaining slots go to the best by rank
+//     (natives, then naturalized citizens: Trotsky and Buñuel stay in the
+//     pool but only fill a gap); then the epochs are repaired: while fewer
+//     than MIN_OLD were born before OLD_BEFORE (or fewer than MIN_RECENT after
+//     RECENT_AFTER), the lowest-ranked person of the most over-filled bucket,
+//     who is not from the epoch in need (nor from the other one when it is at
+//     its minimum), is swapped for the best candidate of that epoch in the
+//     same bucket, else anywhere. At most MAX_NO_IMAGE of the twelve lack a
+//     portrait (curated people are exempt). The twelve are returned
+//     interleaved by domain so a row reads varied: the best of each domain in
+//     TARGETS order, then the second of each, and so on.
+
+function selectPeople(iso, countryQ) {
+  const ov = peopleOverrides[iso] || {};
+  const exclude = new Set(ov.exclude || []);
+  const pool = (candidates.get(iso) || [])
+    .map((p) => ({ ...p, ...details.get(p.qid), links: Math.max(p.links, details.get(p.qid)?.links || 0) }))
+    .filter((p) => p.label && !exclude.has(p.qid) && !(p.crime && !p.curated));
   const native = (p) => !p.births || !p.births.length || p.births.includes(countryQ);
-  list.sort((a, b) => (Number(native(b)) - Number(native(a))) || (b.links - a.links));
-  const withImage = list.filter((p) => p.image);
-  const pick = withImage.length >= MIN_WITH_IMAGE ? withImage : [...withImage, ...list.filter((p) => !p.image)];
-  return pick.slice(0, MAX_PEOPLE).map((p) => ({
-    qid: p.qid,
-    label: p.label,
-    desc: p.desc,
-    image: p.image,
-    born: p.born,
-    died: p.died,
-    job: p.job,
-  }));
+  pool.sort((a, b) => (Number(native(b)) - Number(native(a))) || (b.links - a.links));
+  const natives = pool.filter(native);
+  const picked = [];
+  const has = new Set();
+  let noImage = 0;
+  const canTake = (p) => !has.has(p.qid) && (p.image || p.curated || noImage < MAX_NO_IMAGE);
+  const take = (p) => { picked.push(p); has.add(p.qid); if (!p.image) noImage += 1; };
+  const drop = (p) => { picked.splice(picked.indexOf(p), 1); has.delete(p.qid); if (!p.image) noImage -= 1; };
+  const count = (d) => picked.filter((p) => p.domain === d).length;
+  const target = (d) => TARGETS.find(([x]) => x === d)?.[1] || 0;
+
+  for (const q of ov.include || []) {
+    const p = pool.find((x) => x.qid === q);
+    if (p && picked.length < MAX_PEOPLE) take(p);
+    else if (!p) console.warn(`people override ${iso}: ${q} not in Wikidata with a label, skipped`);
+  }
+  for (const [d, n] of TARGETS) {
+    for (const p of natives) {
+      if (count(d) >= n || picked.length >= MAX_PEOPLE) break;
+      if (p.domain === d && canTake(p)) take(p);
+    }
+  }
+  for (const p of pool) {
+    if (picked.length >= MAX_PEOPLE) break;
+    if (canTake(p)) take(p);
+  }
+
+  const isOld = (p) => p.born !== null && p.born < OLD_BEFORE;
+  const isRecent = (p) => p.born !== null && p.born > RECENT_AFTER;
+  const repair = (cond, other, min) => {
+    for (let guard = 0; guard < MAX_PEOPLE && picked.filter(cond).length < min; guard += 1) {
+      const otherTight = picked.filter(other).length <= min;
+      const victims = picked.filter((p) => !p.curated && !cond(p) && !(otherTight && other(p)))
+        .sort((a, b) => (Number(native(a)) - Number(native(b))) || ((count(b.domain) - target(b.domain)) - (count(a.domain) - target(a.domain))) || (a.links - b.links));
+      const victim = victims[0];
+      if (!victim) return;
+      drop(victim);
+      const repl = natives.find((p) => cond(p) && p.domain === victim.domain && canTake(p))
+        || natives.find((p) => cond(p) && canTake(p))
+        || pool.find((p) => cond(p) && canTake(p));
+      if (!repl) { take(victim); return; }
+      take(repl);
+    }
+  };
+  repair(isOld, isRecent, MIN_OLD);
+  repair(isRecent, isOld, MIN_RECENT);
+
+  // Interleave by domain, each domain by rank (curated first).
+  const rank = (a, b) => (Number(Boolean(b.curated)) - Number(Boolean(a.curated))) || (Number(native(b)) - Number(native(a))) || (b.links - a.links);
+  const byDomain = DOMAINS.map((d) => picked.filter((p) => p.domain === d).sort(rank));
+  const out = [];
+  for (let i = 0; out.length < picked.length; i += 1) for (const list of byDomain) if (list[i]) out.push(list[i]);
+  return out;
+}
+
+const selected = new Map(); // iso -> [person]
+for (const c of countries) selected.set(c.iso2, c.q ? selectPeople(c.iso2, c.q) : []);
+
+// The occupation shown: among the person's occupations in their domain
+// (else any), Preferred rank first, then one the Wikidata description itself
+// names ("film director" for Kurosawa, whose best-known occupation item would
+// otherwise be "writer"), then the best-known one.
+function jobFor(p) {
+  const score = ([q, j]) => {
+    const pos = mentionPos(q, jobInfo.get(q)?.label, p.desc);
+    // Tiers: Preferred rank, then the earliest mention (one character of
+    // position outweighs any sitelinks gap), then the occupation's sitelinks.
+    return (j.preferred ? 1e7 : 0) + (pos >= 0 ? 1e6 - pos * 1000 : 0) + (jobInfo.get(q)?.links || 0);
+  };
+  const all = [...p.jobs.entries()].filter(([q]) => jobInfo.get(q));
+  const own = all.filter(([q]) => jobDomain.get(q) === p.domain);
+  const best = (own.length ? own : all).sort((a, b) => score(b) - score(a))[0];
+  if (DEBUG) console.log(`  ${p.label?.en}: ${(own.length ? own : all).map(([q, j]) => `${jobInfo.get(q).label.en}=${score([q, j])}`).join(', ')}`);
+  return best ? jobInfo.get(best[0]).label : null;
+}
+function peopleFor(iso) {
+  return (selected.get(iso) || []).map((p) => {
+    const e = { qid: p.qid, label: p.label, desc: p.desc, image: p.image, born: p.born, died: p.died, job: jobFor(p), domain: p.domain };
+    if (p.curated) e.curated = true;
+    return e;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -873,7 +1157,7 @@ const out = {
     images: 'Each image and audio file is a Wikimedia Commons file with its own license; show the author and license from the file page. Thumbnail: https://commons.wikimedia.org/wiki/Special:FilePath/<image>?width=640 ; audio: https://commons.wikimedia.org/wiki/Special:FilePath/<audio>',
     text: 'desc is the Wikidata description; wiki links point to Wikipedia (CC BY-SA 4.0).',
   },
-  notes: 'anthem = P85 (national anthem preferred over flag salutes); audio = the best instrumental recording and audioVocal = the best sung recording among the anthem item\'s P51 files and the audio files of its Commons category (P373), chosen by file name and description (a file that does not say it is sung counts as instrumental; MIDI and synthetic files are skipped), each with the license and credit from the Commons file page; lyricsUrl = Wikisource (es, then en) else Wikipedia; people = humans with P27 = the country, the most-linked across Wikipedias, people born elsewhere sort after the rest, with a photo when at least 6 have one, capped at 12; languages = P37, speakers = P1098 of the language item (global, not per country), code = P218; music.genres = music genres (P31/P279* Q188451) with country of origin (P495) = the country, genres with 3+ origin countries skipped, by sitelinks, capped at 12; music.instruments = subclasses of musical instrument (Q34379) with P495 = the country, capped at 6; curated: true marks items from data/overrides/music.json.',
+  notes: 'anthem = P85 (national anthem preferred over flag salutes); audio = the best instrumental recording and audioVocal = the best sung recording among the anthem item\'s P51 files and the audio files of its Commons category (P373), chosen by file name and description (a file that does not say it is sung counts as instrumental; MIDI and synthetic files are skipped), each with the license and credit from the Commons file page; lyricsUrl = Wikisource (es, then en) else Wikipedia; people = up to 12 humans chosen by domain buckets (arts 4, science 2, sports 2, politics 2, thought 1, other 1, each by sitelinks; a short bucket gives its slots to the best remaining) with at least 3 born before 1900 and 3 after 1940 when they exist, from the 150 most-linked citizens (P27) plus people born in the country before 1900 who were citizens of a predecessor state; domain = the occupations\' (P106) place in the Wikidata class tree; people born elsewhere only fill a gap; at most 2 without a photo; curated: true marks items from data/overrides/people.json; languages = P37, speakers = P1098 of the language item (global, not per country), code = P218; music.genres = music genres (P31/P279* Q188451) with country of origin (P495) = the country, genres with 3+ origin countries skipped, by sitelinks, capped at 12; music.instruments = subclasses of musical instrument (Q34379) with P495 = the country, capped at 6; curated: true marks items from data/overrides/music.json.',
   countries: {},
 };
 
@@ -886,10 +1170,10 @@ if (ONLY) {
   } catch { console.warn(`${OUT} not found; writing only ${[...ONLY].join(', ')}`); }
 }
 
-const stats = { anthem: 0, anthemAudio: 0, anthemVocal: 0, anthemLyrics: 0, anthemWikisource: 0, anthemWiki: 0, people: 0, people6: 0, people12: 0, withImage: 0, peopleTotal: 0, languages: 0, langTotal: 0, speakers: 0, music: 0, genres: 0, instruments: 0, instrCountries: 0, musicBytes: 0 };
+const stats = { anthem: 0, anthemAudio: 0, anthemVocal: 0, anthemLyrics: 0, anthemWikisource: 0, anthemWiki: 0, people: 0, people6: 0, people10: 0, people12: 0, domains4: 0, old3: 0, recent3: 0, byDomain: {}, withImage: 0, peopleTotal: 0, languages: 0, langTotal: 0, speakers: 0, music: 0, genres: 0, instruments: 0, instrCountries: 0, musicBytes: 0 };
 for (const c of countries) {
   const a = anthem.get(c.iso2);
-  const people = c.q ? rankPeople(c.iso2, c.q) : [];
+  const people = c.q ? peopleFor(c.iso2) : [];
   const langs = languages.get(c.iso2) || [];
   const m = musicFor(c.iso2);
   out.countries[c.iso2] = {
@@ -927,9 +1211,19 @@ for (const c of countries) {
   }
   if (people.length) stats.people += 1;
   if (people.length >= 6) stats.people6 += 1;
+  if (people.length >= 10) stats.people10 += 1;
   if (people.length >= 12) stats.people12 += 1;
+  const domains = new Set(people.map((p) => p.domain));
+  if (domains.size >= 4) stats.domains4 += 1;
+  if (people.filter((p) => p.born !== null && p.born < OLD_BEFORE).length >= MIN_OLD) stats.old3 += 1;
+  if (people.filter((p) => p.born !== null && p.born > RECENT_AFTER).length >= MIN_RECENT) stats.recent3 += 1;
+  for (const p of people) stats.byDomain[p.domain] = (stats.byDomain[p.domain] || 0) + 1;
   stats.peopleTotal += people.length;
   stats.withImage += people.filter((p) => p.image).length;
+  if (ONLY) {
+    console.log(`\n${c.iso2}: ${people.length} people`);
+    for (const p of people) console.log(`  ${p.domain.padEnd(8)} ${String(p.born ?? '?').padStart(5)}  ${p.label.es}${p.label.en !== p.label.es ? ` / ${p.label.en}` : ''}  (${p.job?.en || '-'}${p.image ? '' : ', no image'}${p.curated ? ', curated' : ''})`);
+  }
   if (langs.length) stats.languages += 1;
   stats.langTotal += langs.length;
   stats.speakers += langs.filter((l) => l.speakers).length;
@@ -957,5 +1251,5 @@ const { size } = await stat(OUT);
 console.log(`wrote ${OUT} (${(size / 1024).toFixed(0)} KB)`);
 console.log(`anthem: ${stats.anthem} countries, ${stats.anthemAudio} with audio, ${stats.anthemVocal} with a sung recording, ${stats.anthemWiki} with a Wikipedia article, ${stats.anthemWikisource} with lyrics on Wikisource, ${stats.anthemLyrics} with a lyrics link`);
 console.log(`music: ${stats.music} countries, ${stats.genres} genres, ${stats.instruments} instruments in ${stats.instrCountries} countries, ${stats.music ? (stats.musicBytes / stats.music / 1024).toFixed(1) : 0} KB per country on average`);
-console.log(`people: ${stats.people} countries, ${stats.people6} with >= 6, ${stats.people12} with 12; ${stats.peopleTotal} people, ${stats.withImage} with image${failed.length ? `; failed: ${failed.join(' ')}` : ''}`);
+console.log(`people: ${stats.people} countries, ${stats.people6} with >= 6, ${stats.people10} with >= 10, ${stats.people12} with 12; ${stats.domains4} with >= 4 domains, ${stats.old3} with >= ${MIN_OLD} born before ${OLD_BEFORE}, ${stats.recent3} with >= ${MIN_RECENT} born after ${RECENT_AFTER}; ${stats.peopleTotal} people, ${stats.withImage} with image; by domain: ${Object.entries(stats.byDomain).sort((a, b) => b[1] - a[1]).map(([d, n]) => `${d} ${n}`).join(', ')}${failed.length ? `; failed: ${failed.join(' ')}` : ''}`);
 console.log(`languages: ${stats.languages} countries, ${stats.langTotal} entries, ${stats.speakers} with a speaker count`);
