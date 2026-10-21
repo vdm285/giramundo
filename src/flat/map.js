@@ -264,15 +264,32 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
         for (const f of admin.features) path(f);
         ctx.stroke();
         if (k2 > 9) {
-          ctx.font = `600 ${Math.min(14, 8 + k2 / 4)}px Outfit, system-ui, sans-serif`;
+          const size = Math.min(14, 8 + k2 / 4);
+          ctx.font = `600 ${size}px Outfit, system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          for (const f of admin.features) {
-            const c = f.properties.centroid || geoCentroid(f);
-            f.properties.centroid = c;
-            const [cx, cy] = projection(c);
+          // Labels do not overlap: bigger units first (their names matter
+          // more at this zoom), then each name only where it fits clear
+          // of the ones already placed and inside a unit wide enough for it.
+          const placed = [];
+          const units = admin.features.map((f) => {
+            if (!f.properties.centroid) f.properties.centroid = geoCentroid(f);
+            if (f.properties.span == null) {
+              const [[x0, y0], [x1, y1]] = geoBounds(f);
+              f.properties.span = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+              f.properties.spanW = Math.max(0, x1 - x0);
+            }
+            return f;
+          }).sort((a, b) => b.properties.span - a.properties.span);
+          for (const f of units) {
             const label = f.properties.name || '';
             if (!label) continue;
+            const [cx, cy] = projection(f.properties.centroid);
+            const tw = ctx.measureText(label).width;
+            if (f.properties.spanW * k2 < tw * 0.7 && f.properties.id !== adminHover && f.properties.id !== adminSelected) continue;
+            const box = [cx - tw / 2 - 4, cy - size * 0.7, cx + tw / 2 + 4, cy + size * 0.7];
+            if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+            placed.push(box);
             ctx.lineWidth = 3;
             ctx.strokeStyle = 'rgba(247,242,232,0.85)';
             ctx.strokeText(label, cx, cy);
