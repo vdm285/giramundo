@@ -5,6 +5,7 @@
 // genres born there. Every window is a door into its section.
 
 import { html, nothing } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import { t, locale } from '../app/i18n.js';
 import { commonsThumb } from '../live/sources.js';
 import { aiModeUrl, headlinePrompt } from '../live/ask.js';
@@ -60,7 +61,7 @@ export function renderInicio(m) {
   const genres = culture?.music?.genres || [];
   const yt = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
 
-  return html`
+  return keyed(country.iso2 || country.placeId, html`
     ${renderMoney(m)}
 
     <div class="soundbar">
@@ -113,7 +114,7 @@ export function renderInicio(m) {
         ${genres.slice(0, 8).map((g) => html`<a class="chip yt" href=${yt(`${g.label?.[lang] || g.label?.en} ${lang === 'es' ? 'música' : 'music'} ${country.name.en}`)} target="_blank" rel="noreferrer" title=${g.desc?.[lang] || g.desc?.en || ''}>▶ ${g.label?.[lang] || g.label?.en}</a>`)}
       </div>` : html`
       <div class="chips music"><a class="chip yt" href=${yt(`${lang === 'es' ? 'música de' : 'music of'} ${name}`)} target="_blank" rel="noreferrer">▶ ${t(lang, 'music')}</a></div>`}
-  `;
+  `);
 }
 
 export { locale };

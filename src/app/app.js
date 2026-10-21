@@ -173,18 +173,43 @@ async function loadContent(country) {
 
 // ---------- selection ----------
 
-// Distance by size, and a longitude offset so the country lands in the
-// part of the screen the dossier does not cover.
+// Distance by size, and a camera placement that puts the country on the
+// screen's horizontal line, centered in the part of the screen the dossier
+// does not cover. Shifting longitude alone is not enough on a sphere: at
+// latitude 46 a 38-degree shift walks the point up the curved parallel, so
+// the country lands high and short. Here the camera center is chosen on the
+// great circle that is horizontal on screen, at the angle whose perspective
+// projection is exactly half the covered width.
 function flyToCountry(country, turns = 0) {
   const dist = country.onMap ? (country.area > 3e6 ? 3.0 : country.area > 3e5 ? 2.4 : 1.9) : 1.6;
   const dossier = document.querySelector('.dossier');
   const covered = dossier && !store.get().collapsed && window.innerWidth >= 920 ? dossier.getBoundingClientRect().width + 20 : 0;
   const h = window.innerHeight;
-  const radiusPx = (1 / (dist * Math.tan((32 * Math.PI / 180) / 2))) * (h / 2);
-  // At the screen center one degree of longitude spans radiusPx * pi / 180 pixels.
-  const degPerPx = 57.3 / Math.max(80, radiusPx);
-  const shift = (covered / 2) * degPerPx;
-  surface.flyTo(country.ll[0], country.ll[1] + shift, dist, { turns });
+  const [latC, lonC] = country.ll;
+  if (!covered) { surface.flyTo(latC, lonC, dist, { turns }); return; }
+  const f = (h / 2) / Math.tan((32 * Math.PI / 180) / 2);
+  if (store.get().flat) {
+    // Equirectangular: pixels per degree at the center is exact everywhere.
+    const degPerPx = 57.3 / Math.max(80, f / dist);
+    surface.flyTo(latC, lonC + (covered / 2) * degPerPx, dist, { turns });
+    return;
+  }
+  // Perspective: a point at angle th from the sub-camera point projects at
+  // x = f * sin(th) / (dist - cos(th)). Solve for th = covered / 2 pixels.
+  const s = (covered / 2) / f;
+  let th = Math.atan2(covered / 2, f * (dist - 1));
+  for (let i = 0; i < 8; i += 1) {
+    const den = dist - Math.cos(th);
+    const g = Math.sin(th) / den - s;
+    const dg = (Math.cos(th) * den - Math.sin(th) * Math.sin(th)) / (den * den);
+    if (!Number.isFinite(dg) || Math.abs(dg) < 1e-6) break;
+    th -= g / dg;
+  }
+  th = Math.max(0, Math.min(th, 1.2));
+  const rad = Math.PI / 180;
+  const lat0 = Math.asin(Math.max(-0.999, Math.min(0.999, Math.sin(latC * rad) / Math.cos(th))));
+  const dLon = Math.atan2(Math.sin(th), Math.cos(lat0) * Math.cos(th));
+  surface.flyTo(lat0 / rad, lonC + dLon / rad, dist, { turns });
 }
 
 // ---------- hear it: real stations for a language or a city ----------

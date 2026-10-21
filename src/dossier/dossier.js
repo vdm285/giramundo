@@ -2,6 +2,7 @@
 // Pure template; app/app.js owns state and fetching.
 
 import { html, nothing } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import { SECTIONS } from '../app/router.js';
 import { t } from '../app/i18n.js';
 import { continentLabel, currencyLabel, displayCapital, formatCompact, formatCount, formatTime, languageNames, mainZone } from '../data/format.js';
@@ -72,7 +73,7 @@ export function renderDossier(m) {
     default: body = renderWiki(m, 'historia');
   }
 
-  return html`
+  return keyed(country.iso2 || country.placeId, html`
     <div class="hero">
       ${(() => {
         // A slow slideshow of up to five World Heritage photos, cross-fading;
@@ -152,5 +153,5 @@ export function renderDossier(m) {
       </div>
       <p class="src">${t(lang, 'sources')}: Wikipedia (CC BY-SA)${country.popYear ? `, World Bank ${country.popYear}` : ''}, Natural Earth, Wikidata. ${world.built}.
         <a href=${`https://github.com/vdm285/giramundo/issues/new?title=${encodeURIComponent(`Corrección: ${name}`)}`} target="_blank" rel="noreferrer">${t(lang, 'report')}</a></p>
-    </div>`;
+    </div>`);
 }

@@ -2,6 +2,7 @@
 // the rate line. Pure templates; app/app.js owns the slideshow index.
 
 import { html, nothing } from 'lit';
+import { keyed } from 'lit/directives/keyed.js';
 import { t } from '../app/i18n.js';
 import { commonsPage, commonsThumb } from '../live/sources.js';
 
@@ -64,7 +65,10 @@ export function renderMoney(m) {
   const cidx = coins.length ? (m.tick4 || 0) % coins.length : 0;
   const coin = coins[cidx];
   const base = m.base ?? import.meta.env.BASE_URL;
-  return html`
+  // Keyed by currency: the browser keeps showing an <img>'s old pixels
+  // until the new src decodes, so a reused element would flash the previous
+  // country's note. A new element per currency starts blank.
+  return keyed(code, html`
     <div class="money-row">
       ${bills.length ? html`
       <div class="money" tabindex="0" aria-label=${`${t(lang, 'moneyBills')}: ${name}`}>
@@ -82,7 +86,7 @@ export function renderMoney(m) {
       </a>` : nothing}
     </div>
     ${uncertainNote}
-    ${oldToggle}`;
+    ${oldToggle}`);
 }
 
 // A 24-hour ring: day half, night half, their hour hand and yours.
