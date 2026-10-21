@@ -13,7 +13,7 @@ export function splitBills(bills) {
   for (const b of bills) {
     const title = `${b.file || ''} ${b.series || ''}`;
     // Diagrams of a note's parts and security features are not notes.
-    if (/partes de|diagram|esquema|elementos de seguridad|security feature|watermark|marca de agua|detalle|detail of|\.tif$/i.test(title)) continue;
+    if (/partes de|diagram|esquema|elementos de seguridad|security feature|seguridad\d|hilo din|watermark|marca de agua|detalle|detail of|\.tif$|\.gif$/i.test(title)) continue;
     const years = [...title.matchAll(/\b(1[6-9]\d\d|20\d\d)\b/g)].map((x) => Number(x[1]));
     const year = b.year || (years.length ? Math.max(...years) : null);
     const flagged = /specimen|histor|antigu|\bold\b|obsolet|demonetiz|emergency|provisional|revoluci|local issue|banco yucateco|comisi[oó]n reguladora/i.test(title);

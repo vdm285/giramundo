@@ -21,7 +21,8 @@
     "culture": "node tools/build-culture.mjs",
     "maps": "node tools/build-maps.mjs",
     "money": "node tools/build-money.mjs",
-    "admin": "node tools/build-admin.mjs"
+    "admin": "node tools/build-admin.mjs",
+    "food": "node tools/build-food.mjs"
   },
   "dependencies": {
     "@fontsource/fraunces": "^5.2.9",
