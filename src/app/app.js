@@ -149,6 +149,8 @@ async function loadContent(country) {
   }
 
   if (!iso) return;
+  // The deep dish list by region (npm run food -- --country=XX); null until a country has one.
+  fetch(`${base}data/food/${iso}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((food) => patch({ food }));
   live.loadNews(iso, base).then((news) => patch({ news: news || { es: [], en: [] } }));
   live.loadVideos(iso, base, world.videoSeed).then((videos) => patch({ videos }));
   live.holidaysToday(iso).then((holidays) => patch({ holidays }));
@@ -218,16 +220,27 @@ function nearestStation(iso2, ll) {
   return best;
 }
 
-// ---------- focus mode: a country fills the flat stage, states one tap down ----------
+// ---------- focus: tap the selected country again and its states fill the screen ----------
+//
+// The globe (or the flat map) stays the stage for picking countries. A
+// second tap on the country you already opened drops one level: the flat
+// map fits the country to the whole viewport, the dossier steps aside, the
+// states take hover cards, a tap on a state shows its municipalities. The
+// corner globe and the breadcrumb are the way back up.
 
 let adminIndex;
 let prevFlatBeforeFocus = null;
 let mini = null;
+const stateInfo = new Map();
 
 async function loadAdminIndex() {
   if (adminIndex !== undefined) return adminIndex;
   adminIndex = await fetch(`${base}data/admin/index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   return adminIndex;
+}
+
+function hasAdmin(country) {
+  return Boolean(country?.iso2 && adminIndex?.countries?.[country.iso2]?.levels?.adm1?.file);
 }
 
 function coveredRight() {
@@ -237,23 +250,24 @@ function coveredRight() {
 }
 
 async function enterFocus(country) {
+  if (!country?.onMap) return false;
   const s = store.get();
-  if (!s.focusMode || !country?.onMap) return false;
+  if (!s.focus) prevFlatBeforeFocus = s.flat;
   if (!s.flat) {
-    prevFlatBeforeFocus = false;
     store.set({ flat: true });
     await mountSurface(true);
   }
   const feature = featureOf(country);
-  store.set({ focus: true, admin: null, adminLevel: 0, state: null });
+  store.set({ focus: true, admin: null, adminLevel: 0, state: null, stateHover: null, collapsed: true });
+  surface?.setSpin(false);
   surface?.setAdmin?.(null);
-  if (feature) surface?.fitBounds?.(feature, { coveredRight: coveredRight() });
+  if (feature) surface?.fitBounds?.(feature, { coveredRight: 0, pad: 0.05 });
   // States, when the boundaries exist for this country.
   const index = await loadAdminIndex();
   const entry = index?.countries?.[country.iso2];
   if (!entry?.levels?.adm1?.file || store.get().id !== country.iso2) return true;
   const adm1 = await fetch(`${base}data/admin/${entry.levels.adm1.file}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  if (adm1 && store.get().id === country.iso2) {
+  if (adm1 && store.get().id === country.iso2 && store.get().focus) {
     store.set({ admin: adm1, adminLevel: 1 });
     surface?.setAdmin?.(adm1);
   }
@@ -262,11 +276,15 @@ async function enterFocus(country) {
 
 function exitFocus() {
   const s = store.get();
+  if (!s.focus) return;
   surface?.setAdmin?.(null);
-  store.set({ focus: false, admin: null, adminLevel: 0, state: null, collapsed: true });
+  store.set({ focus: false, admin: null, adminLevel: 0, state: null, stateHover: null, collapsed: false });
+  const country = countryOf(s.id);
   if (prevFlatBeforeFocus === false && s.flat) {
     store.set({ flat: false });
     mountSurface(false);
+  } else if (country) {
+    flyToCountry(country);
   }
   prevFlatBeforeFocus = null;
 }
@@ -275,9 +293,9 @@ async function openState(feature) {
   const s = store.get();
   const country = countryOf(s.id);
   if (!feature || !country) return;
-  store.set({ state: feature, collapsed: false });
+  store.set({ state: feature, stateHover: null });
   surface?.setAdminSelected?.(feature.properties.id);
-  surface?.fitBounds?.(feature, { coveredRight: coveredRight() });
+  surface?.fitBounds?.(feature, { coveredRight: 0, pad: 0.08 });
   const index = await loadAdminIndex();
   const level = index?.countries?.[country.iso2]?.levels?.adm2;
   if (!level) return;
@@ -295,6 +313,35 @@ async function backToCountry() {
   const country = countryOf(s.id);
   store.set({ state: null });
   if (country) await enterFocus(country);
+}
+
+// The hover card for a state: name now, Wikipedia's photo and one line when
+// they arrive. Fetched once per state and language; never invented.
+function setStateHover(unit) {
+  const s = store.get();
+  const id = unit?.properties?.id || null;
+  if ((s.stateHover?.id || null) === id) return;
+  if (!unit) { store.set({ stateHover: null }); return; }
+  const name = unit.properties.name || '';
+  store.set({ stateHover: { id, name, level: s.adminLevel } });
+  if (s.adminLevel === 1) loadStateInfo(name, s.lang, countryOf(s.id));
+}
+
+const LOOKS_LIKE_A_REGION = /estado|state|entidad|provinc|regi[oó]n|departament|department|prefectur|\bland\b|oblast|cant[oó]n|county|comunidad aut|territor|distrito federal|federal district|ciudad|city/i;
+
+async function loadStateInfo(name, lang, country) {
+  const key = `${lang}:${name}`;
+  if (stateInfo.has(key)) return;
+  stateInfo.set(key, null);
+  const looks = (x) => x && LOOKS_LIKE_A_REGION.test(`${x.description} ${x.extract.slice(0, 160)}`);
+  let x = await live.wikiSummary(lang, name);
+  if (!looks(x)) {
+    const alt = await live.wikiSummary(lang, lang === 'es' ? `Estado de ${name}` : `${name} (state)`);
+    if (looks(alt)) x = alt;
+  }
+  if (!x && country) x = await live.wikiSummary(lang, `${name} (${country.name?.[lang] || country.name?.en})`);
+  stateInfo.set(key, x || false);
+  store.set({ stateTick: Date.now() });
 }
 
 function mountMini() {
@@ -374,15 +421,16 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   const s = store.get();
   const feature = featureOf(country);
   if (s.compare && s.compare !== id && id !== s.id) play?.clearCompare();
-  store.set({ id, collapsed: false, section: section || s.section, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0, heroIdx: 0 });
+  store.set({ id, collapsed: s.focus, section: section || s.section, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0, heroIdx: 0, radioPick: 0, radioOpen: false, stateHover: null });
   writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
   surface?.setSpin(false);
   surface?.setBeacon(country.ll?.[0], country.ll?.[1]);
   if (fly && country.ll && surface) {
-    // Focus mode takes over the stage; otherwise the classic fly.
-    enterFocus(country).then((took) => { if (!took) flyToCountry(country, turns); });
+    // Inside the state level, a new country stays at the state level.
+    if (s.focus && country.onMap) enterFocus(country);
+    else { if (s.focus) exitFocus(); flyToCountry(country, turns); }
   }
   mini?.setSelected(feature);
   syncMarkers();
@@ -514,11 +562,13 @@ function onTap(event) {
   }
   const marker = surface.markerAt(event.clientX, event.clientY);
   if (marker?.kind === 'city') { openCity(marker.city); return; }
-  // In focus mode a tap inside the country goes one level down (state);
-  // a tap on a neighbor at the edge switches country as usual.
-  if (s.focus && s.adminLevel === 1 && surface.adminAt) {
+  // At the state level a tap inside the country goes one level down; at the
+  // municipality level it marks the municipality; a tap on a neighbor at
+  // the edge switches country as usual.
+  if (s.focus && s.admin && surface.adminAt) {
     const unit = surface.adminAt(event.clientX, event.clientY);
-    if (unit) { openState(unit); return; }
+    if (unit && s.adminLevel === 1) { openState(unit); return; }
+    if (unit && s.adminLevel === 2) { surface.setAdminSelected?.(unit.properties.id); setStateHover(unit); return; }
   }
   if (marker?.kind === 'place') {
     store.set({ place: marker.place, section: 'lugares', collapsed: false });
@@ -529,7 +579,16 @@ function onTap(event) {
   const ll = surface.pickLatLon(event.clientX, event.clientY);
   const feature = ll && world.index.find(ll.lon, ll.lat);
   const country = countryOfFeature(feature);
-  if (country) { select(country.iso2 || country.placeId); return; }
+  if (country) {
+    // The second tap on the country you already opened goes down to its states.
+    if (!s.focus && (country.iso2 || country.placeId) === s.id && country.onMap) {
+      if (hasAdmin(country)) enterFocus(country);
+      else toast(t(s.lang, 'noStates'));
+      return;
+    }
+    select(country.iso2 || country.placeId);
+    return;
+  }
   if (ll) toast(`${t(s.lang, 'ocean')}: ${nameWater(ll.lat, ll.lon, s.lang)} (${t(s.lang, 'approx')}).`);
   document.getElementById('coach').hidden = true;
 }
@@ -544,9 +603,11 @@ function onMove(event) {
   if (marker?.kind === 'place') label = marker.place.label?.[s.lang] || marker.place.label?.en || '';
   else if (marker?.kind === 'city') label = marker.city.name?.[s.lang] || marker.city.name?.en || '';
   else if (s.focus && s.admin && surface.adminAt) {
+    // The hover card carries the name; no tooltip at this level.
     const unit = surface.adminAt(event.clientX, event.clientY);
     surface.setAdminHover?.(unit?.properties?.id || null);
-    if (unit) label = unit.properties.name || '';
+    setStateHover(unit);
+    label = '';
   }
   else if (marker?.kind === 'country') label = countryOf(marker.id)?.name?.[s.lang] || '';
   else {
@@ -554,6 +615,7 @@ function onMove(event) {
     feature = ll && world.index.find(ll.lon, ll.lat);
     const country = countryOfFeature(feature);
     label = country?.name?.[s.lang] || country?.name?.en || feature?.properties?.name || '';
+    if (country && !s.focus && (country.iso2 || country.placeId) === s.id && hasAdmin(country)) label += ` · ${t(s.lang, 'tapAgain')}`;
     if (s.view === 'data' && country?.iso2 && s.legend) {
       const v = s.legend.def.values?.[country.iso2];
       if (v) label += ` · ${new Intl.NumberFormat(s.lang === 'es' ? 'es-MX' : 'en-US', { maximumFractionDigits: s.legend.def.decimals ?? 1 }).format(v[0])} ${s.legend.def.unit?.[s.lang] || ''}`;
@@ -563,7 +625,7 @@ function onMove(event) {
   if (key !== s.hover) { store.set({ hover: key }); surface.setHover(feature); }
   tip.hidden = !label;
   if (label) { tip.textContent = label; tip.style.left = `${event.clientX}px`; tip.style.top = `${event.clientY}px`; }
-  document.body.style.cursor = label ? 'pointer' : '';
+  document.body.style.cursor = label || (s.focus && s.stateHover) ? 'pointer' : '';
 }
 
 // ---------- actions from the dossier and the shell ----------
@@ -614,7 +676,8 @@ async function on(action, payload) {
       await mountSurface(payload);
       break;
     case 'lang': {
-      const lang = s.lang === 'es' ? 'en' : 'es';
+      const lang = payload || (s.lang === 'es' ? 'en' : 'es');
+      if (lang === s.lang) break;
       store.set({ lang });
       writeSetting('lang', lang);
       document.documentElement.lang = lang;
@@ -635,7 +698,6 @@ async function on(action, payload) {
       else navigator.clipboard?.writeText(url).then(() => toast(t(s.lang, 'copied')));
       break;
     }
-    case 'about': document.getElementById('about').showModal(); break;
     case 'settings': document.getElementById('settings').showModal(); break;
     case 'playmenu': store.set({ playmenu: !s.playmenu }); break;
     case 'game': play.startGame(payload); break;
@@ -682,10 +744,11 @@ async function on(action, payload) {
       // recording from Commons, never a synthetic voice.
       const c = countryOf(s.id);
       const anthem = c?.iso2 ? world.culture?.[c.iso2]?.anthem : null;
-      if (!anthem?.audio) break;
+      const file = anthem?.audioVocal || anthem?.audio;
+      if (!file) break;
       const id = `anthem-${c.iso2}`;
       if (s.radio?.station?.id === id) { radio.toggle(); break; }
-      radio.play({ id, name: anthem.label?.[s.lang] || anthem.label?.en || 'Anthem', url: live.commonsThumb(anthem.audio).replace(/\?width=\d+$/, '') }, c.iso2);
+      radio.play({ id, name: anthem.label?.[s.lang] || anthem.label?.en || 'Anthem', url: live.commonsThumb(file).replace(/\?width=\d+$/, '') }, c.iso2);
       break;
     }
     case 'hear-city': {
@@ -718,12 +781,18 @@ async function on(action, payload) {
     case 'set-home':
       if (s.id) { store.set({ home: s.id }); writeSetting('home', s.id); }
       break;
-    case 'focus-mode': {
-      store.set({ focusMode: payload });
-      writeSetting('focusMode', payload);
-      const c = countryOf(s.id);
-      if (!payload && s.focus) exitFocus();
-      else if (payload && c) select(c.iso2 || c.placeId);
+    case 'focus': { const c = countryOf(s.id); if (c && hasAdmin(c)) enterFocus(c); break; }
+    case 'focus-exit': exitFocus(); break;
+    case 'radio-list': store.set({ radioOpen: !s.radioOpen }); break;
+    case 'radio-shuffle': {
+      // Another station of this country, never the one on air.
+      const list = world.radio?.[payload] || [];
+      if (list.length < 2) break;
+      const now = radio.state.iso2 === payload ? list.findIndex((x) => x.id === radio.state.station?.id) : (s.radioPick || 0) % list.length;
+      let i = Math.floor(Math.random() * (list.length - 1));
+      if (i >= now) i += 1;
+      store.set({ radioPick: i });
+      radio.play(list[i], payload);
       break;
     }
     case 'spin':
@@ -754,46 +823,46 @@ function shell(s) {
   const places = country?.iso2 ? world.places?.[country.iso2] : null;
   const legend = s.legend;
   const nf = (n) => new Intl.NumberFormat(s.lang === 'es' ? 'es-MX' : 'en-US', { maximumFractionDigits: legend?.def.decimals ?? 1, notation: n > 99999 ? 'compact' : 'standard' }).format(n);
+  const info = s.focus && s.stateHover ? stateInfo.get(`${s.lang}:${s.stateHover.name}`) : null;
   return html`
-    <header class="topbar">
-      <a class="wordmark" href="#" @click=${(e) => { e.preventDefault(); select(s.home || 'MX', { turns: 0 }); }}>Giramundo</a>
-      <form class="search ${s.searchOpen ? 'open' : ''}" role="search" autocomplete="off" @submit=${onSearchSubmit}>
-        <button type="button" class="lens" aria-label=${t(s.lang, 'search')} aria-expanded=${Boolean(s.searchOpen)} @click=${() => { store.set({ searchOpen: !s.searchOpen }); requestAnimationFrame(() => document.getElementById('q')?.focus()); }}>${searchIcon}</button>
-        <input id="q" type="search" placeholder=${t(s.lang, 'search')} aria-label=${t(s.lang, 'search')} tabindex=${s.searchOpen ? '0' : '-1'} @input=${onSearchInput} @keydown=${onSearchKey} @blur=${() => setTimeout(() => { store.set({ hits: [] }); if (!document.getElementById('q')?.value) store.set({ searchOpen: false }); }, 150)}>
-        <div class="suggest" role="listbox">
-          ${(s.hits || []).map((c, i) => html`<button type="button" role="option" aria-selected=${i === searchIndex} @mousedown=${(e) => e.preventDefault()} @click=${() => pickHit(c)}>
-            ${c.flag ? html`<img alt="" src=${base + c.flag}>` : nothing}${c.name[s.lang] || c.name.en}
-            ${c.aliasNote ? html`<span class="note">${c.aliasNote}</span>` : nothing}</button>`)}
-        </div>
-      </form>
-      <div class="topright">
-        <div class="seg" role="group" aria-label=${t(s.lang, 'viewsLabel')}>
-          ${['earth', 'atlas', 'data'].map((v) => html`<button aria-pressed=${s.view === v} @click=${() => on('view', v)}>${t(s.lang, `view${v[0].toUpperCase()}${v.slice(1)}`)}</button>`)}
-          <button aria-pressed=${s.flat} title=${s.flat ? t(s.lang, 'viewGlobe') : t(s.lang, 'viewFlat')} aria-label=${s.flat ? t(s.lang, 'viewGlobe') : t(s.lang, 'viewFlat')} @click=${() => on('flat', !s.flat)}>${s.flat ? globeIcon : flatIcon}</button>
-        </div>
-        <button class="ghost" @click=${() => on('lang')}>${t(s.lang, 'langSwitch')}</button>
-        <button class="ghost icon gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
+    <form class="search ${s.searchOpen ? 'open' : ''}" role="search" autocomplete="off" @submit=${onSearchSubmit}>
+      <button type="button" class="corner lens" aria-label=${t(s.lang, 'search')} aria-expanded=${Boolean(s.searchOpen)} @click=${() => { store.set({ searchOpen: !s.searchOpen }); requestAnimationFrame(() => document.getElementById('q')?.focus()); }}>${searchIcon}</button>
+      <input id="q" type="search" placeholder=${t(s.lang, 'search')} aria-label=${t(s.lang, 'search')} tabindex=${s.searchOpen ? '0' : '-1'} @input=${onSearchInput} @keydown=${onSearchKey} @blur=${() => setTimeout(() => { store.set({ hits: [] }); if (!document.getElementById('q')?.value) store.set({ searchOpen: false }); }, 150)}>
+      <div class="suggest" role="listbox">
+        ${(s.hits || []).map((c, i) => html`<button type="button" role="option" aria-selected=${i === searchIndex} @mousedown=${(e) => e.preventDefault()} @click=${() => pickHit(c)}>
+          ${c.flag ? html`<img alt="" src=${base + c.flag}>` : nothing}${c.name[s.lang] || c.name.en}
+          ${c.aliasNote ? html`<span class="note">${c.aliasNote}</span>` : nothing}</button>`)}
       </div>
-    </header>
-    ${s.collapsed && country ? html`<button class="reopen" @click=${() => on('collapse')} aria-label=${t(s.lang, 'expand')}>${country.flag ? html`<img alt="" src=${base + country.flag}>` : nothing}${country.name[s.lang] || country.name.en}</button>` : nothing}
+    </form>
+    <button class="corner gear" title=${t(s.lang, 'settings')} aria-label=${t(s.lang, 'settings')} @click=${() => on('settings')}>${gearIcon}</button>
+    ${s.collapsed && country && !s.focus ? html`<button class="reopen" @click=${() => on('collapse')} aria-label=${t(s.lang, 'expand')}>${country.flag ? html`<img alt="" src=${base + country.flag}>` : nothing}${country.name[s.lang] || country.name.en}</button>` : nothing}
     ${s.focus && country ? html`
       <div class="crumb" aria-label="Nivel">
-        <button @click=${() => exitFocus()}>${t(s.lang, 'worldLevel')}</button><span class="sep">›</span>
+        <button @click=${() => exitFocus()} title=${t(s.lang, 'backToGlobe')}>${t(s.lang, 'worldLevel')}</button><span class="sep">›</span>
         ${s.state ? html`<button @click=${() => backToCountry()}>${country.name[s.lang] || country.name.en}</button><span class="sep">›</span><span>${s.state.properties.name}</span>` : html`<span>${country.name[s.lang] || country.name.en}</span>`}
         ${s.admin?.features?.length ? html`<span class="n">${s.admin.features.length} ${t(s.lang, s.adminLevel === 2 ? 'municipalities' : 'states')}</span>` : nothing}
       </div>
+      ${s.stateHover ? html`
+        <div class="statecard ${info?.thumb ? 'has-img' : ''}" aria-live="polite">
+          ${info?.thumb ? html`<img src=${info.thumb} alt="">` : nothing}
+          <div class="txt"><b>${s.stateHover.name}</b>${info?.description ? html`<small>${info.description}</small>` : nothing}</div>
+        </div>` : nothing}
       <div class="miniglobe">
         <canvas id="mini" width="150" height="150" aria-label=${t(s.lang, 'miniHint')} title=${t(s.lang, 'miniHint')}></canvas>
-        <div class="hint">${t(s.lang, 'miniHint')}</div>
       </div>` : nothing}
     ${s.playmenu ? renderPlayMenu({ lang: s.lang, on, tours: play.tours(s.lang) }) : nothing}
     ${s.tour ? renderTourBar({ lang: s.lang, tour: s.tour, on, progress: play.tourProgress() }) : nothing}
     <dialog id="settings" class="settings">
       <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
       <h2>${t(s.lang, 'settings')}</h2>
+      <h3>${t(s.lang, 'language')}</h3>
+      <div class="opts">${[['es', 'Español'], ['en', 'English']].map(([l, label]) => html`<button aria-pressed=${s.lang === l} @click=${() => on('lang', l)}>${label}</button>`)}</div>
+      <h3>${t(s.lang, 'viewsLabel')}</h3>
+      <div class="opts">${['earth', 'atlas', 'data'].map((v) => html`<button aria-pressed=${s.view === v} @click=${() => on('view', v)}>${t(s.lang, `view${v[0].toUpperCase()}${v.slice(1)}`)}</button>`)}</div>
+      <h3>${t(s.lang, 'surface')}</h3>
+      <div class="opts"><button aria-pressed=${!s.flat} @click=${() => on('flat', false)}>${t(s.lang, 'viewGlobe')}</button><button aria-pressed=${s.flat} @click=${() => on('flat', true)}>${t(s.lang, 'viewFlat')}</button></div>
       <h3>${t(s.lang, 'quality')}</h3>
-      <div class="opts">${['auto', 'full', 'simple'].map((q) => html`<button aria-pressed=${s.quality === q} @click=${() => on('quality', q)}>${t(s.lang, `quality${q[0].toUpperCase()}${q.slice(1)}`)}</button>`)}
-        <button aria-pressed=${s.flat} @click=${() => on('flat', !s.flat)}>${t(s.lang, 'viewFlat')}</button></div>
+      <div class="opts">${['auto', 'full', 'simple'].map((q) => html`<button aria-pressed=${s.quality === q} @click=${() => on('quality', q)}>${t(s.lang, `quality${q[0].toUpperCase()}${q.slice(1)}`)}</button>`)}</div>
       <p class="help">${t(s.lang, 'qualityHelp')}</p>
       ${s.perf ? html`<p class="help" style="font-variant-numeric:tabular-nums">${t(s.lang, 'perf')}: ${s.perf.fps} fps · ${s.perf.width}×${s.perf.height} @${Number(s.perf.pixelRatio).toFixed(2)} · ${s.perf.gpu}${s.perf.webgl2 === false ? ' · WebGL 1' : ''}</p>` : nothing}
       <h3>${t(s.lang, 'opening')}</h3>
@@ -802,7 +871,6 @@ function shell(s) {
       <h3>${t(s.lang, 'homeBase')}: ${countryOf(s.home)?.name?.[s.lang] || s.home}</h3>
       <div class="opts"><button @click=${() => on('set-home')} ?disabled=${!s.id || s.id === s.home}>${t(s.lang, 'setHome')}</button></div>
       <label class="row"><input type="checkbox" .checked=${s.spin} @change=${(e) => on('spin', e.target.checked)}> ${t(s.lang, 'spin')}</label>
-      <label class="row"><input type="checkbox" .checked=${s.focusMode} @change=${(e) => on('focus-mode', e.target.checked)}> ${t(s.lang, 'focusMode')}</label>
       <label class="row">${t(s.lang, 'sunOffset')} <input type="range" min="-12" max="12" step="0.5" .value=${String(s.sun)} @input=${(e) => on('sun', Number(e.target.value))}> <button type="button" class="chip" @click=${() => on('sun', 0)}>${t(s.lang, 'sunNow')}</button></label>
       <h3>${t(s.lang, 'about')}</h3>
       <p class="help">${t(s.lang, 'aboutLead')} ${t(s.lang, 'aboutP2')}</p>
@@ -860,14 +928,6 @@ function shell(s) {
       <h3>Firefox</h3>
       <p>${t(s.lang, 'slowFirefox')}</p>
       <p class="help">${t(s.lang, 'slowMeanwhile')}${s.perf ? html` · ${t(s.lang, 'perf')}: ${s.perf.gpu}` : nothing}</p>
-    </dialog>
-    <dialog id="about">
-      <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
-      <h2>Giramundo</h2>
-      <p>${t(s.lang, 'aboutLead')}</p>
-      <p>${t(s.lang, 'aboutP2')}</p>
-      <p>${t(s.lang, 'aboutP3')}</p>
-      <p>${t(s.lang, 'aboutP4')} <a href="https://github.com/vdm285/giramundo" target="_blank" rel="noreferrer">github.com/vdm285/giramundo</a></p>
     </dialog>`;
 }
 
@@ -1004,7 +1064,7 @@ export async function boot({ wire = false } = {}) {
     spin: readSetting('spin', true),
     sun: 0,
     id: 'MX',
-    section: hashed?.section || 'historia',
+    section: hashed?.section || 'inicio',
     collapsed: false,
     hover: null,
     indicator: 'lifeExp',
@@ -1027,13 +1087,17 @@ export async function boot({ wire = false } = {}) {
     ask: null,
     convertAmount: 100,
     searchOpen: false,
-    // Focus mode: a selected country fills the flat stage with its states;
-    // the corner globe is the way out.
-    focusMode: readSetting('focusMode', true),
+    // The state level (a second tap on the open country); the corner globe
+    // and the breadcrumb are the way out.
     focus: false,
     admin: null,
     adminLevel: 0,
     state: null,
+    stateHover: null,
+    // One beat every 4 s for the slideshows on the card.
+    tick4: 0,
+    radioPick: 0,
+    radioOpen: false,
   });
   document.documentElement.lang = lang;
   radio.subscribe((r) => store.set({ radio: r }));
@@ -1062,6 +1126,7 @@ export async function boot({ wire = false } = {}) {
     document.body.classList.toggle('picking', Boolean(s.picking));
     document.body.classList.toggle('wide', Boolean(s.wide));
     document.body.classList.toggle('wire', WIRE);
+    document.body.classList.toggle('focus', Boolean(s.focus));
     render(shell(s), ui);
     mountMini();
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
@@ -1084,6 +1149,7 @@ export async function boot({ wire = false } = {}) {
   }
 
   await extras;
+  await loadAdminIndex();
   // Which country opens: the link wins; otherwise the reader's setting.
   let opening = null;
   if (hashed?.iso && world.byIso.get(hashed.iso)) opening = hashed.iso;
@@ -1127,14 +1193,17 @@ export async function boot({ wire = false } = {}) {
     const n = c?.iso2 ? (world.places?.[c.iso2]?.heritage || []).filter((h) => h.image).slice(0, 5).length : 0;
     if (n >= 2) store.set({ heroIdx: ((s.heroIdx || 0) + 1) % n });
   }, 6000);
-  // Banknote slideshow: one bill every 4 s, paused a while after a manual step.
+  // One beat every 4 s while the card is open: the coin, the food and places
+  // windows and the news line step on it; the bill steps too unless the
+  // reader just moved it by hand.
   setInterval(() => {
     const s = store.get();
     if (s.collapsed || s.game || s.city || document.visibilityState !== 'visible') return;
-    if (s.moneyHold && Date.now() - s.moneyHold < 8000) return;
+    const next = { tick4: (s.tick4 || 0) + 1 };
     const code = countryOf(s.id)?.currencies?.[0]?.code;
     const n = shownBills(code, s.moneyOld).length;
-    if (n > 1 && s.section === 'historia') store.set({ moneyIdx: (s.moneyIdx + 1) % n });
+    if (n > 1 && s.section === 'inicio' && !(s.moneyHold && Date.now() - s.moneyHold < 8000)) next.moneyIdx = (s.moneyIdx + 1) % n;
+    store.set(next);
   }, 4000);
   // Performance readout, refreshed only while the settings dialog is open.
   setInterval(() => {
@@ -1147,7 +1216,7 @@ export async function boot({ wire = false } = {}) {
   window.addEventListener('keydown', (event) => {
     const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
     if (event.key === '/' && !typing) { event.preventDefault(); document.getElementById('q').focus(); return; }
-    if (event.key === 'Escape') { document.getElementById('about')?.close(); }
+    if (event.key === 'Escape' && store.get().focus && !typing) { exitFocus(); return; }
     if (typing || !surface) return;
     const step = 28;
     if (event.key === 'ArrowLeft') surface.control?.nudge(-step, 0);

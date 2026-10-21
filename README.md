@@ -18,7 +18,11 @@ Open http://localhost:5173. For headlines locally, run `npm run news` once (it t
 
 ## Settings
 
-The gear at the right end of the bottom dock opens the only settings menu: visual quality (Automatic, Full, Simple, or the flat map), which country opens when there is no link (country of the day, your home country, where you are, random, or the last one you saw), your home country, the idle spin, and a slider to move the sun. Everything is stored in the browser only. A shared link always opens the country in the link.
+The whole screen is the globe. Two translucent icons sit at the corners: the lens (search) top-left and the cog bottom-left. The cog opens the only settings menu: language, view (Earth, Atlas, Data), surface (globe or flat map), visual quality (Automatic, Full, Simple), which country opens when there is no link (country of the day, your home country, where you are, random, or the last one you saw), your home country, the idle spin, and a slider to move the sun. Everything is stored in the browser only. A shared link always opens the country in the link.
+
+## Going down a level
+
+Tap a country and its card opens with the country centered in the free part of the screen. Tap the same country again and its states fill the screen (Mexico has them today; `npm run admin -- --country=XX` adds a country). Hover a state for its photo and one line from Wikipedia, tap it for its municipalities, use the breadcrumb or the corner globe to come back up. Escape also goes back.
 
 ## If it feels slow
 
@@ -44,7 +48,7 @@ If none of that helps, the gear menu has **Sencilla** (fewer effects) and the **
 - `src/globe/`: the Three.js globe. `scene.js` builds the scene, `camera.js` handles drag, zoom and flights, `shaders.js` is the GLSL, `paint.js` paints the country-id and border textures.
 - `src/flat/map.js`: the flat equirectangular map, drawn with Canvas 2D. Same picking, same dossier.
 - `src/app/`: the controller (`app.js`), the store, the hash router, the strings.
-- `src/dossier/`: the country panel and its seven sections.
+- `src/dossier/`: the country panel: Inicio (overview), Ahora, Historia, Comida, Cultura, Lugares, Ver, Datos.
 - `src/live/sources.js`: every live source the browser calls, and the deploy-time files it reads.
 - `src/data/`: loading and shaping the country data; `src/geo/`: sphere math, picking, oceans.
 - `tools/`: build scripts for facts, Wikipedia extracts, World Bank indicators, headlines, places and videos.

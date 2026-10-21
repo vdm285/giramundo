@@ -16,7 +16,7 @@ There is one code base. Wireframe is a mode, not a copy:
 - `src/flat/map.js` draws white paper and black outlines only; no plates, no night mask.
 - `wireframe.css` hides every image, video and iframe, removes shadows, blur and transitions, and lays the page out as a map on the left and a plain document on the right.
 
-Everything else is untouched: data loading, two-phase boot, the dossier's seven sections, headlines, radio, places, cities, the game, tours, compare, settings, share links.
+Everything else is untouched: data loading, two-phase boot, the dossier's eight sections, headlines, radio, places, cities, the game, tours, compare, settings, share links.
 
 ## Try it
 

@@ -9,6 +9,7 @@ import { haversineKm } from '../geo/math.js';
 import { commonsPage, commonsThumb } from '../live/sources.js';
 import { shortName } from '../live/radio.js';
 import { aiModeUrl, headlinePrompt } from '../live/ask.js';
+import { renderConverter, renderRateLine } from './money.js';
 
 const MAPS_KEY = import.meta.env.VITE_MAPS_EMBED_KEY || '';
 
@@ -44,28 +45,38 @@ function moneyCell(country, rates, lang) {
 const playIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
 const pauseIcon = html`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>`;
 
-export function renderRadio(m) {
+const shuffleIcon = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>`;
+
+// One station at a time: the one playing from this country, else the pick.
+// Shuffle jumps to another; the full list waits behind the small arrow.
+export function renderRadio(m, { compact = false } = {}) {
   const { lang, country, world, radio, on } = m;
   const stations = country.iso2 ? world.radio?.[country.iso2] : null;
   if (!world.radio) return nothing;
-  return html`
-    ${stations?.length ? html`<ul class="stations" aria-label=${t(lang, 'radio')}>${stations.map((s) => {
-      const current = radio?.station?.id === s.id;
-      const busy = current && (radio.status === 'playing' || radio.status === 'loading');
-      return html`<li aria-current=${current}>
-        <button class="play" @click=${() => on(current ? 'radio-toggle' : 'radio-play', { station: s, iso2: country.iso2 })} aria-label=${busy ? t(lang, 'radioPause') : t(lang, 'radioPlay')}>${busy ? pauseIcon : playIcon}</button>
-        ${s.favicon ? html`<img src=${s.favicon} alt="" loading="lazy" @error=${(e) => { e.target.hidden = true; }}>` : nothing}
-        <div style="min-width:0">
-          <div class="name" title=${s.name}>${shortName(s.name)}</div>
-          <div class="meta">${[...(s.tags || []).slice(0, 2), s.codec ? `${s.codec}${s.bitrate ? ` ${s.bitrate}k` : ''}` : ''].filter(Boolean).join(' · ')}
-            ${current && radio.status === 'loading' ? html` · ${t(lang, 'radioLoading')}` : nothing}
-            ${current && radio.status === 'error' ? html` · <span style="color:var(--coral)">${t(lang, radio.error === 'gesture' ? 'radioGesture' : 'radioError')}</span>` : nothing}
-          </div>
+  if (!stations?.length) return html`<p class="muted small">${t(lang, 'radioNone')}</p>`;
+  const row = (s, { shuffle = false } = {}) => {
+    const current = radio?.station?.id === s.id;
+    const busy = current && (radio.status === 'playing' || radio.status === 'loading');
+    return html`<div class="radio-one" aria-current=${current}>
+      <button class="play" @click=${() => on(current ? 'radio-toggle' : 'radio-play', { station: s, iso2: country.iso2 })} aria-label=${busy ? t(lang, 'radioPause') : t(lang, 'radioPlay')}>${busy ? pauseIcon : playIcon}</button>
+      ${s.favicon ? html`<img src=${s.favicon} alt="" loading="lazy" @error=${(e) => { e.target.hidden = true; }}>` : nothing}
+      <div style="min-width:0">
+        <div class="name" title=${s.name}>${shortName(s.name)}</div>
+        <div class="meta">${[...(s.tags || []).slice(0, 2), s.codec ? `${s.codec}${s.bitrate ? ` ${s.bitrate}k` : ''}` : ''].filter(Boolean).join(' · ')}
+          ${current && radio.status === 'loading' ? html` · ${t(lang, 'radioLoading')}` : nothing}
+          ${current && radio.status === 'error' ? html` · <span style="color:var(--coral)">${t(lang, radio.error === 'gesture' ? 'radioGesture' : 'radioError')}</span>` : nothing}
         </div>
-      </li>`;
-    })}</ul>
-    <p class="small muted"><a href="https://www.radio-browser.info" target="_blank" rel="noreferrer">Radio-Browser</a> · ${lang === 'es' ? 'Las estaciones son de sus emisoras.' : 'Stations belong to their broadcasters.'}</p>`
-      : html`<p class="muted">${t(lang, 'radioNone')}</p>`}`;
+      </div>
+      ${shuffle && stations.length > 1 ? html`
+        <button class="mini" @click=${() => on('radio-shuffle', country.iso2)} title=${t(lang, 'radioShuffle')} aria-label=${t(lang, 'radioShuffle')}>${shuffleIcon}</button>
+        <button class="mini" @click=${() => on('radio-list')} aria-expanded=${Boolean(m.radioOpen)} title=${t(lang, 'stations')} aria-label=${t(lang, 'stations')}>${m.radioOpen ? '▴' : '▾'}</button>` : nothing}
+    </div>`;
+  };
+  const playingHere = radio?.iso2 === country.iso2 && stations.find((x) => x.id === radio.station?.id);
+  const pick = playingHere || stations[(m.radioPick || 0) % stations.length];
+  return html`${row(pick, { shuffle: true })}
+    ${m.radioOpen ? html`<ul class="stations" aria-label=${t(lang, 'radio')}>${stations.filter((x) => x !== pick).map((x) => html`<li>${row(x)}</li>`)}</ul>
+      <p class="small muted"><a href="https://www.radio-browser.info" target="_blank" rel="noreferrer">Radio-Browser</a> · ${lang === 'es' ? 'Las estaciones son de sus emisoras.' : 'Stations belong to their broadcasters.'}</p>` : nothing}`;
 }
 
 export function renderAhora(m) {
@@ -104,7 +115,7 @@ export function renderAhora(m) {
     </div>
 
     <div class="now-cols">
-      <div>${renderRadio(m)}</div>
+      <div>${renderRadio(m, { compact: true })}</div>
       <div>${news == null ? html`<div class="skel"></div><div class="skel short"></div>` : headlines(news, lang, country)}</div>
       <div>
         ${shown.length ? html`
@@ -176,7 +187,7 @@ export function renderWiki(m, key) {
     return html`
       <p class="muted">${t(lang, 'emptyLayer')}</p>
       <p class="links"><a href=${wikiSearch(lang, query)} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a></p>
-      ${dishList(dishes, lang)}`;
+      ${dishList(dishes, lang, content.food)}`;
   }
   // Media first; the paragraph waits behind "Leer" (optional, never gone).
   const open = Boolean(m.readOpen?.[key]);
@@ -192,7 +203,7 @@ export function renderWiki(m, key) {
         <p class="links">${page.url ? html`<a href=${page.url} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a>` : nothing}</p>` : nothing}
     </div>`;
   return html`
-    ${key === 'comida' ? dishList(dishes, lang) : nothing}
+    ${key === 'comida' ? dishList(dishes, lang, content.food) : nothing}
     ${key === 'cultura' ? renderCulture(m) : nothing}
     ${fold}`;
 }
@@ -209,8 +220,11 @@ function renderCulture(m) {
     ${anthem ? html`
       <p style="margin:0 0 6px"><strong>${anthem.label?.[lang] || anthem.label?.en || ''}</strong>
         ${anthem.wiki?.[lang] || anthem.wiki?.en ? html` · <a href=${anthem.wiki?.[lang] || anthem.wiki?.en} target="_blank" rel="noreferrer">Wikipedia</a>` : nothing}</p>
-      ${anthem.audio ? html`<audio controls preload="none" src=${commonsThumb(anthem.audio).replace(/\?width=\d+$/, '')} style="width:100%"></audio>
-        <p class="small muted"><a href=${commonsPage(anthem.audio)} target="_blank" rel="noreferrer">Wikimedia Commons</a> · ${t(lang, 'anthemNote')}</p>` : nothing}` : nothing}
+      ${anthem.audioVocal || anthem.audio ? html`<audio controls preload="none" src=${commonsThumb(anthem.audioVocal || anthem.audio).replace(/\?width=\d+$/, '')} style="width:100%"></audio>
+        <p class="small muted">${t(lang, anthem.audioVocal ? 'anthemSung' : 'anthemInstrumental')} · <a href=${commonsPage(anthem.audioVocal || anthem.audio)} target="_blank" rel="noreferrer">Wikimedia Commons</a>${anthem.audioVocal && anthem.audio ? html` · <a href=${commonsPage(anthem.audio)} target="_blank" rel="noreferrer">${t(lang, 'anthemInstrumental')}</a>` : nothing}${anthem.lyricsUrl ? html` · <a href=${anthem.lyricsUrl} target="_blank" rel="noreferrer">${t(lang, 'lyrics')}</a>` : nothing} · ${t(lang, 'anthemNote')}</p>` : nothing}` : nothing}
+    ${culture.music?.genres?.length ? html`
+      <div class="chips music" style="margin-top:10px" aria-label=${t(lang, 'music')}>${culture.music.genres.slice(0, 12).map((g) => html`<a class="chip yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${g.label?.[lang] || g.label?.en} ${lang === 'es' ? 'música' : 'music'} ${m.country.name.en}`)}`} target="_blank" rel="noreferrer" title=${g.desc?.[lang] || g.desc?.en || ''}>▶ ${g.label?.[lang] || g.label?.en}</a>`)}</div>
+      <p class="small muted">${t(lang, 'musicNote')}</p>` : nothing}
     ${langs.length ? html`
       <div class="chips" style="margin-top:10px" aria-label=${t(lang, 'languages')}>${langs.map((l) => {
         const station = m.stationFor?.(l);
@@ -232,29 +246,47 @@ function renderCulture(m) {
       <p class="small muted">${t(lang, 'peopleNote')}</p>` : nothing}`;
 }
 
-function dishList(dishes, lang) {
-  if (!dishes.length) return nothing;
+function dishTile(d, lang) {
+  const name = d.label?.[lang] || d.label?.en || d.label?.local || '';
+  const local = d.label?.local && d.label.local !== name ? d.label.local : '';
+  // Search with the local name too: recipes by locals, for locals.
+  const q = `${local || name} ${lang === 'es' ? 'receta' : 'recipe'}`;
+  const region = d.region?.[lang] || d.region?.es || '';
   return html`
-    <div class="places" aria-label=${lang === 'es' ? 'Platos típicos' : 'Typical dishes'}>${dishes.slice(0, 8).map((d) => {
-      const name = d.label?.[lang] || d.label?.en || '';
-      const local = d.label?.local && d.label.local !== name ? d.label.local : '';
-      // Search with the local name too: recipes by locals, for locals.
-      const q = local ? `${local} ${lang === 'es' ? 'receta' : 'recipe'}` : (lang === 'es' ? `${name} receta` : `${name} recipe`);
+    <div class="place dish ${d.image ? '' : 'noimg'}" style="cursor:default">
+      <a class="yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`} target="_blank" rel="noreferrer" title=${t(lang, 'ytVideo')}>▶ YouTube</a>
+      ${d.image ? html`<img loading="lazy" src=${commonsThumb(d.image, 480)} alt="">` : nothing}
+      <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}${local ? html`<small>${local}</small>` : nothing}${region ? html`<small>${region}</small>` : nothing}</a>
+    </div>`;
+}
+
+// The curated handful first (public/data/places.json), then the deep list
+// by region (public/data/food/XX.json) when the pipeline has run for the
+// country. Dishes without a photo appear as text tiles: the name is the point.
+function dishList(dishes, lang, food) {
+  if (!dishes.length && !food?.all?.length) return nothing;
+  const regions = (food?.regions || []).filter((r) => r.dishes?.length);
+  const seen = new Set(dishes.map((d) => d.qid));
+  return html`
+    ${dishes.length ? html`<div class="places dishes" aria-label=${lang === 'es' ? 'Platillos típicos' : 'Typical dishes'}>${dishes.map((d) => dishTile(d, lang))}</div>` : nothing}
+    ${regions.map((r) => {
+      const list = r.dishes.filter((d) => !seen.has(d.qid));
+      if (!list.length) return nothing;
+      list.forEach((d) => seen.add(d.qid));
       return html`
-      <div class="place ${d.image ? '' : 'noimg'}" style="cursor:default">
-        <a class="yt" href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`} target="_blank" rel="noreferrer" title=${t(lang, 'ytVideo')}>▶ YouTube</a>
-        ${d.image ? html`<img loading="lazy" src=${commonsThumb(d.image, 480)} alt="">` : nothing}
-        <a class="cap" style="text-decoration:none;color:inherit" href=${d.wiki?.[lang] || d.wiki?.en || `https://www.wikidata.org/wiki/${d.qid}`} target="_blank" rel="noreferrer">${name}${local ? html`<small>${local}</small>` : nothing}${d.region?.[lang] || d.region?.es ? html`<small>${d.region?.[lang] || d.region?.es}</small>` : nothing}</a>
-      </div>`;
-    })}</div>
-    <p class="small muted">Wikidata · Wikimedia Commons</p>`;
+        <h3 class="region">${r.label?.[lang] || r.label?.es || r.id} <small class="muted">· ${list.length}</small></h3>
+        <div class="places dishes dense">${list.map((d) => dishTile({ ...d, region: d.region || null }, lang))}</div>`;
+    })}
+    <p class="small muted">Wikidata · Wikimedia Commons${food?.all?.length ? ` · ${lang === 'es' ? 'Wikipedia en español' : 'Spanish Wikipedia'} · ${food.all.length} ${t(lang, 'dishesMore')}` : ''}</p>`;
 }
 
 // ---------- Lugares ----------
 
 export function renderLugares(m) {
   const { lang, places, on } = m;
-  const sites = places?.heritage || [];
+  const heritage = places?.heritage || [];
+  const landmarks = (places?.landmarks || []).filter((p) => !heritage.some((h) => h.qid === p.qid));
+  const sites = [...heritage, ...landmarks];
   if (!sites.length) return html`<p class="muted">${t(lang, 'placesNone')}</p>`;
   const sel = m.place;
   return html`
@@ -263,7 +295,7 @@ export function renderLugares(m) {
         ${sel.image ? html`<img src=${commonsThumb(sel.image, 900)} alt="">` : nothing}
         <h3>${sel.label?.[lang] || sel.label?.en}</h3>
         ${sel.desc?.[lang] || sel.desc?.en ? html`<p>${sel.desc?.[lang] || sel.desc?.en}</p>` : nothing}
-        <p class="small muted">${sel.year ? `${t(lang, 'placesInscribed')} ${sel.year} · ` : ''}UNESCO · Wikidata${sel.image ? html` · <a href=${commonsPage(sel.image)} target="_blank" rel="noreferrer">Commons</a>` : nothing}</p>
+        <p class="small muted">${sel.year ? `${t(lang, 'placesInscribed')} ${sel.year} · UNESCO · ` : ''}Wikidata${sel.image ? html` · <a href=${commonsPage(sel.image)} target="_blank" rel="noreferrer">Commons</a>` : nothing}</p>
         <p class="links">
           <a href=${`https://www.youtube.com/results?search_query=${encodeURIComponent(`${sel.label?.en || sel.label?.es} 4K`)}`} target="_blank" rel="noreferrer">▶ ${t(lang, 'ytVideo')}</a>
           ${sel.wiki?.[lang] || sel.wiki?.en ? html`<a href=${sel.wiki?.[lang] || sel.wiki?.en} target="_blank" rel="noreferrer">${t(lang, 'readMore')}</a>` : nothing}
@@ -273,9 +305,9 @@ export function renderLugares(m) {
     <div class="places">${sites.map((s) => html`
       <button class="place ${s.image ? '' : 'noimg'}" @click=${() => on('place', s)} aria-pressed=${sel === s}>
         ${s.image ? html`<img loading="lazy" src=${commonsThumb(s.image, 480)} alt="">` : nothing}
-        <div class="cap">${s.label?.[lang] || s.label?.en}${s.year ? html`<small>${s.year}</small>` : nothing}</div>
+        <div class="cap">${s.label?.[lang] || s.label?.en}${s.year ? html`<small>UNESCO · ${s.year}</small>` : s.desc?.[lang] || s.desc?.en ? html`<small>${s.desc?.[lang] || s.desc?.en}</small>` : nothing}</div>
       </button>`)}</div>
-    <p class="small muted">UNESCO World Heritage · Wikidata (CC0) · Wikimedia Commons</p>`;
+    <p class="small muted">${heritage.length ? 'UNESCO World Heritage · ' : ''}${landmarks.length ? `${t(lang, 'landmarksNote')} · ` : ''}Wikidata (CC0) · Wikimedia Commons</p>`;
 }
 
 // ---------- Ver ----------
@@ -376,7 +408,14 @@ export function renderDatos(m) {
     return { key, def, v, rank, n: all.length };
   });
   const nf = (n, d) => new Intl.NumberFormat(locale(lang), { maximumFractionDigits: d }).format(n);
+  const code = country.currencies?.[0]?.code;
+  const cur = code ? m.money?.[code] : null;
+  const perUsd = m.content?.rates?.usd?.[code];
   return html`
+    ${perUsd && code !== 'USD' ? html`
+      <h2>${t(lang, 'rateAndChange')} · ${cur?.name?.[lang] || cur?.name?.en || code}</h2>
+      ${renderConverter(m, code, cur?.name?.[lang] || code, perUsd)}
+      ${renderRateLine(m, code)}` : nothing}
     ${pop?.length > 1 ? html`
       <h2>${t(lang, 'dataPopulation')}</h2>
       ${sparkline(pop, world.pophistory.start, lang)}

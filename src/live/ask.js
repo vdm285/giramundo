@@ -14,11 +14,14 @@ export function aiModeUrl(prompt) {
 
 const list = (items, n) => items.filter(Boolean).slice(0, n).join(', ');
 
-// One headline, one country: history, culture, sides, and what locals say.
+// One headline, one country. Staged on purpose: a bare "give context" request
+// came back as a summary of the article. Asking the model to first read it,
+// then name the underlying themes, then pull earlier news and history that
+// explain those themes, gives the connect-the-dots answer the reader wanted.
 export function headlinePrompt(headline, countryName, lang) {
   return lang === 'es'
-    ? `Noticia de ${countryName}: "${headline}". Explica el contexto histórico y cultural que ayuda a entenderla, qué partes están en juego y qué opinan los locales (incluye foros como Reddit). Fuentes recientes.`
-    : `News from ${countryName}: "${headline}". Explain the historical and cultural context behind it, who the parties are, and what locals are saying (include forums like Reddit). Recent sources.`;
+    ? `Noticia de ${countryName}: "${headline}". Trabaja en pasos. 1) Busca la noticia y resume en dos líneas qué pasó. 2) Nombra los temas de fondo que toca (instituciones, actores, conflictos o procesos de largo plazo). 3) Para cada tema, trae noticias anteriores y hechos históricos de ${countryName} que lo expliquen, con fechas y fuentes locales. 4) Cierra con qué conviene seguir observando. Sin introducción ni repetir la pregunta.`
+    : `News from ${countryName}: "${headline}". Work in steps. 1) Find the story and summarize what happened in two lines. 2) Name the underlying themes it touches (institutions, actors, long-running conflicts or processes). 3) For each theme, bring earlier news and historical facts from ${countryName} that explain it, with dates and local sources. 4) Close with what to watch next. No preamble, do not repeat the question.`;
 }
 
 // The prompt for the current view: country or city, the items in focus, one question.

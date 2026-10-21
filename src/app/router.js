@@ -1,8 +1,8 @@
-// The hash is the share link: #mx/historia, #jp/ver/en, #somaliland/ahora.
+// The hash is the share link: #mx (opens Inicio), #mx/historia, #jp/ver/en, #somaliland/ahora.
 // Country first (ISO 3166-1 alpha-2, lowercase, or a place id for the two
 // shapes without a code), then the section, then an optional language.
 
-export const SECTIONS = ['ahora', 'historia', 'comida', 'cultura', 'lugares', 'ver', 'datos'];
+export const SECTIONS = ['inicio', 'ahora', 'historia', 'comida', 'cultura', 'lugares', 'ver', 'datos'];
 const SECTION_SET = new Set(SECTIONS);
 
 // A city inside a country: #mx/ciudad/mx-guadalajara (the id comes from
@@ -25,7 +25,7 @@ export function buildHash({ iso, placeId, section, city, lang }) {
   if (!id) return '#';
   const parts = [id];
   if (city) parts.push('ciudad', city);
-  else if (section && section !== 'historia') parts.push(section);
+  else if (section && section !== 'inicio') parts.push(section);
   if (lang === 'en') parts.push('en');
   return `#${parts.join('/')}`;
 }

@@ -94,7 +94,10 @@ export function createFlatMap(canvas, world, { base, wire = false }) {
 
   function ppd() { return distToPpd(view.dist, h); }
   function minDist() { return ppdToDist(Math.max(w / 360, h / 180) , h); }
-  function clampDist(d) { return Math.max(0.35, Math.min(minDist(), d)); }
+  // The zoom floor: 0.35 keeps the 8k plate from turning to mush at the
+  // world level; with state or municipal boundaries loaded the lines are
+  // the picture, so a state (even Ciudad de México) may fill the screen.
+  function clampDist(d) { return Math.max(admin ? 0.03 : 0.35, Math.min(minDist(), d)); }
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
