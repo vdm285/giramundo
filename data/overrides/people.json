@@ -1,12 +1,14 @@
 {
   "_readme": "Per-country curation of the Gente row, read by tools/build-culture.mjs (npm run culture). include = Wikidata Q-ids that go first (they must be real people with citizenship or birth in the country); exclude = never shown. The rule itself (buckets by domain and epoch) is in docs/PIPELINES.md.",
   "MX": {
-    "note": "2026-10-21: Rivera and Sor Juana sat just under the arts cut by sitelinks; Hidalgo is filed by Wikidata as a Spanish citizen (New Spain) and would never qualify as a native otherwise.",
+    "note": "2026-10-21: Rivera and Sor Juana sat just under the arts cut by sitelinks; Hidalgo is filed by Wikidata as a Spanish citizen (New Spain) and would never qualify as a native otherwise. Guillermo Ochoa (Q215522) excluded while his Spanish label on Wikidata reads 'El Arrebato' (vandalism seen 2026-10-21); drop the exclusion once it is reverted.",
     "include": [
       "Q171128",
       "Q183074",
       "Q55636"
     ],
-    "exclude": []
+    "exclude": [
+      "Q215522"
+    ]
   }
 }
