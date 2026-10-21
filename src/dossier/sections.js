@@ -204,7 +204,7 @@ export function renderWiki(m, key) {
     </div>`;
   return html`
     ${key === 'comida' ? dishList(dishes, lang, content.food) : nothing}
-    ${key === 'cultura' ? renderCulture(m) : nothing}
+    ${key === 'cultura' && !m.noCulture ? renderCulture(m) : nothing}
     ${fold}`;
 }
 

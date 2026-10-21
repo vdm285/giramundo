@@ -11,3 +11,5 @@ shot-dom.html
 public/data/news/
 public/data/videos/
 public/data/walks/
+# Owner-supplied raw captures stay local; only the processed, marked files under public/data/money/ are published.
+data/sources/money/*/captures/

@@ -72,7 +72,7 @@ export function renderMoney(m) {
     <div class="money-row">
       ${bills.length ? html`
       <div class="money" tabindex="0" aria-label=${`${t(lang, 'moneyBills')}: ${name}`}>
-        ${bills.map((b, i) => html`<img class=${i === idx ? 'on' : ''} src=${imageSrc(b, base, 900)} alt=${`${b.denomination || ''} ${name}`} loading=${i === idx ? 'eager' : 'lazy'}>`)}
+        ${bills.map((b, i) => html`<img class=${`${i === idx ? 'on' : ''}${b.h > b.w ? ' tall' : ''}`} src=${imageSrc(b, base, 900)} alt=${`${b.denomination || ''} ${name}`} loading=${i === idx ? 'eager' : 'lazy'}>`)}
         ${bills.length > 1 ? html`<div class="dots">${bills.map((_, i) => html`<i class=${i === idx ? 'on' : ''}></i>`)}</div>
           <button class="step l" aria-label="prev" @click=${() => on('money-step', -1)}>‹</button>
           <button class="step r" aria-label="next" @click=${() => on('money-step', 1)}>›</button>` : nothing}

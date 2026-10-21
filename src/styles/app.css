@@ -333,6 +333,8 @@ a.chip { text-decoration: none; }
 .coin:hover .cap { opacity: 1; }
 .money img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 700ms; }
 .money img.on { opacity: 1; }
+/* Vertical notes (Mexico's 50 and 100) are shown whole on a dark ground. */
+.money img.tall { object-fit: contain; background: #1b1813; }
 .money .label {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 12px 8px; color: #fff; font-size: 0.86rem;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.72), transparent); opacity: 0; transition: opacity 250ms; display: flex; justify-content: space-between; gap: 8px; align-items: flex-end;

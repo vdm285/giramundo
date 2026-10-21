@@ -868,13 +868,20 @@ async function sourceBytes(entry) {
 // Resize to MAX_LOCAL_WIDTH and, when the terms demand it, stamp SPECIMEN
 // diagonally at 30% opacity. Both need sharp; without it the file is copied
 // as-is, and an entry that needs the overlay is refused rather than shown bare.
-async function finish(buf, wantSpecimen) {
+async function finish(buf, wantSpecimen, crop = null) {
   const kind = sniff(buf);
   if (!sharp) {
     if (wantSpecimen) throw new Error('specimen overlay requested but sharp is not installed (npm i -D sharp)');
+    if (crop) throw new Error('crop requested but sharp is not installed (npm i -D sharp)');
     return { buf, ext: kind.ext };
   }
   let img = sharp(buf, { animated: false }).rotate();
+  // An optional crop box [left, top, width, height] in source pixels, for a
+  // note photographed or captured together with others (owner-supplied frames).
+  if (crop) {
+    const [left, top, width, height] = crop.map((n) => Math.round(n));
+    img = sharp(await img.extract({ left, top, width, height }).toBuffer());
+  }
   const meta = await img.metadata();
   const w = Math.min(meta.width, MAX_LOCAL_WIDTH);
   const h = Math.round(meta.height * (w / meta.width));
@@ -912,7 +919,7 @@ async function applyOverrides(currencies) {
       for (const entry of o[kind] || []) {
         try {
           const raw = await sourceBytes(entry);
-          const { buf, ext } = await finish(raw, entry.specimen ?? o.specimen ?? false);
+          const { buf, ext } = await finish(raw, entry.specimen ?? o.specimen ?? false, entry.crop || null);
           const side = entry.side || 'obverse';
           const name = `${safeName(entry.denomination)}-${safeName(side)}.${ext}`;
           await writeFile(join(dir, name), buf);

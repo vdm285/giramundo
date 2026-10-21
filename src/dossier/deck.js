@@ -128,7 +128,7 @@ function panelLugares(m) {
 function panelGente(m) {
   return html`
     ${renderPeopleRow(m)}
-    ${renderWiki(m, 'cultura')}`;
+    ${renderWiki({ ...m, noCulture: true }, 'cultura')}`;
 }
 
 function panelMusica(m) {
