@@ -13,7 +13,8 @@ import { geoContains } from 'd3-geo';
 // The 3D engine is loaded on demand (see mountSurface), so the flat map
 // path never downloads Three.js.
 import { createFlatMap } from '../flat/map.js';
-import { renderDossier, splitBills } from '../dossier/dossier.js';
+import { splitBills } from '../dossier/money.js';
+import { renderDeck } from '../dossier/deck.js';
 
 // The banknotes on screen: today's by default, historical behind the toggle.
 function shownBills(code, old) {
@@ -31,7 +32,7 @@ import { createStore, readSetting, writeSetting } from './state.js';
 
 const radio = createRadio();
 let play = null;
-import { buildHash, parseHash } from './router.js';
+import { buildHash, parseHash, SECTIONS } from './router.js';
 import { t } from './i18n.js';
 
 const base = import.meta.env.BASE_URL;
@@ -376,7 +377,7 @@ function mountMini() {
   mini?.dispose();
   mini = createMiniGlobe(canvas, world, {
     onPick(hit, how) {
-      if (how === 'tap') { exitFocus(); return; }
+      if (how === 'tap') { if (store.get().focus) exitFocus(); else on('collapse'); return; }
       if (hit && (hit.iso2 || hit.placeId) !== store.get().id) select(hit.iso2 || hit.placeId);
     },
   });
@@ -446,7 +447,11 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   const s = store.get();
   const feature = featureOf(country);
   if (s.compare && s.compare !== id && id !== s.id) play?.clearCompare();
-  store.set({ id, collapsed: s.focus, section: section || s.section, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0, heroIdx: 0, radioPick: 0, radioOpen: false, stateHover: null });
+  // The opening rule: a link names its panel; otherwise the first visit
+  // opens on Identidad and every later one on Ahora (read marks, this browser).
+  const seenBefore = Object.keys(s.read?.[id] || {}).length > 0;
+  const panel = section || (id === s.id && s.section ? s.section : (seenBefore ? 'ahora' : 'identidad'));
+  store.set({ id, collapsed: s.focus, section: panel, hover: null, place: null, playmenu: false, city: null, ask: null, factsOpen: false, moneyIdx: 0, heroIdx: 0, radioPick: 0, radioOpen: false, stateHover: null });
   writeSetting('last', id);
   surface?.setSelected(feature);
   // The idle spin would carry the country you are reading about off-screen.
@@ -460,7 +465,30 @@ function select(id, { fly = true, turns = 0, section } = {}) {
   mini?.setSelected(feature);
   syncMarkers();
   loadContent(country);
-  requestAnimationFrame(() => { const el = document.querySelector('.dossier-scroll'); if (el) el.scrollTop = 0; });
+  scheduleRead();
+  requestAnimationFrame(() => { document.querySelector('.panel.on .panel-scroll')?.scrollTo(0, 0); });
+}
+
+// A panel counts as seen after a short while on screen. The record is a
+// day number per country and panel, in this browser only (Settings forgets it).
+let readTimer = 0;
+function scheduleRead() {
+  clearTimeout(readTimer);
+  readTimer = setTimeout(() => {
+    const s = store.get();
+    if (s.collapsed || !s.id || s.focus || s.city || s.game || !s.section) return;
+    const read = { ...(s.read || {}) };
+    read[s.id] = { ...(read[s.id] || {}), [s.section]: Math.floor(Date.now() / 86400000) };
+    const keys = Object.keys(read);
+    if (keys.length > 400) delete read[keys[0]];
+    store.set({ read });
+    writeSetting('read', read);
+  }, 2500);
+}
+
+function deckOpen() {
+  const s = store.get();
+  return Boolean(!s.collapsed && s.id && !s.game && !s.city && !s.focus);
 }
 
 function syncMarkers() {
@@ -660,14 +688,28 @@ async function on(action, payload) {
   switch (action) {
     case 'go': select(payload); break;
     case 'section':
-      store.set({ section: payload, playing: null });
+    case 'panel':
+      store.set({ section: payload, playing: null, place: null });
       syncMarkers();
-      requestAnimationFrame(() => { const el = document.querySelector('.dossier-scroll'); if (el) el.scrollTop = 0; });
+      scheduleRead();
+      requestAnimationFrame(() => { document.querySelector('.panel.on .panel-scroll')?.scrollTo(0, 0); });
+      break;
+    case 'panel-step': {
+      const list = SECTIONS;
+      const i = Math.max(0, list.indexOf(s.section));
+      const j = Math.max(0, Math.min(list.length - 1, i + payload));
+      if (j !== i) on('panel', list[j]);
+      break;
+    }
+    case 'read-reset':
+      store.set({ read: {} });
+      writeSetting('read', {});
       break;
     case 'collapse':
       store.set({ collapsed: !s.collapsed });
       surface?.setSpin(s.spin && !s.collapsed && !reduced);
-      if (!s.collapsed) surface?.control?.hold?.(6000);
+      if (!s.collapsed) { surface?.control?.hold?.(6000); const c = countryOf(s.id); if (c) flyToCountry(c); }
+      else scheduleRead();
       break;
     case 'place': {
       store.set({ place: payload, content: { ...s.content, place: payload } });
@@ -927,6 +969,9 @@ function shell(s) {
       <p class="help">${t(s.lang, 'openingHint')}</p>
       <h3>${t(s.lang, 'homeBase')}: ${countryOf(s.home)?.name?.[s.lang] || s.home}</h3>
       <div class="opts"><button @click=${() => on('set-home')} ?disabled=${!s.id || s.id === s.home}>${t(s.lang, 'setHome')}</button></div>
+      <h3>${t(s.lang, 'shelf')}</h3>
+      <div class="opts"><button @click=${() => on('read-reset')} ?disabled=${!Object.keys(s.read || {}).length}>${t(s.lang, 'forgetRead')}</button></div>
+      <p class="help">${t(s.lang, 'forgetReadHelp')}</p>
       <label class="row"><input type="checkbox" .checked=${s.spin} @change=${(e) => on('spin', e.target.checked)}> ${t(s.lang, 'spin')}</label>
       <label class="row">${t(s.lang, 'sunOffset')} <input type="range" min="-12" max="12" step="0.5" .value=${String(s.sun)} @input=${(e) => on('sun', Number(e.target.value))}> <button type="button" class="chip" @click=${() => on('sun', 0)}>${t(s.lang, 'sunNow')}</button></label>
       <h3>${t(s.lang, 'about')}</h3>
@@ -963,15 +1008,16 @@ function shell(s) {
         </select>
       </div>` : nothing}
     ${s.toast ? html`<p class="toast ${s.toast.actions ? 'ask' : ''}">${s.toast.message}${s.toast.actions ? s.toast.actions.map((a) => html`<button class=${a.quiet ? 'quiet' : ''} @click=${a.run}>${a.label}</button>`) : nothing}</p>` : nothing}
+    ${s.game || s.city ? html`
     <aside class="dossier" aria-live="off">
       <div class="dossier-scroll">
         ${s.game
           ? renderGame({ lang: s.lang, game: s.game, world, on, base })
-          : s.city
-            ? renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base, radio: s.radio, cityStation: nearestStation(country?.iso2, s.city.ll) })
-            : renderDossier({ ...s, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, money: world.money, compareCountry: s.compare ? world.byIso.get(s.compare) : null, on, base, feature: featureOf(country), stationFor: (l) => stationForLanguage(country?.iso2, l) })}
+          : renderCity({ lang: s.lang, city: s.city, country, content: s.content, cities: world.cities?.[country?.iso2] || [], on, base, radio: s.radio, cityStation: nearestStation(country?.iso2, s.city.ll) })}
       </div>
-    </aside>
+    </aside>` : !s.collapsed && country && !s.focus
+      ? renderDeck({ ...s, panel: s.section, country, world, places, culture: country?.iso2 ? world.culture?.[country.iso2] : null, money: world.money, compareCountry: s.compare ? world.byIso.get(s.compare) : null, on, base, feature: featureOf(country), stationFor: (l) => stationForLanguage(country?.iso2, l), canState: hasAdmin(country) })
+      : nothing}
     <dialog id="slowhelp" class="settings">
       <form method="dialog"><button class="x" value="cancel" aria-label=${t(s.lang, 'close')}>×</button></form>
       <h2>${t(s.lang, 'slowTitle')}</h2>
@@ -1121,7 +1167,9 @@ export async function boot({ wire = false } = {}) {
     spin: readSetting('spin', true),
     sun: 0,
     id: 'MX',
-    section: hashed?.section || 'inicio',
+    section: hashed?.section || null,
+    // Panels seen per country, as day numbers; this browser only.
+    read: readSetting('read', {}),
     collapsed: false,
     hover: null,
     indicator: 'lifeExp',
@@ -1187,6 +1235,9 @@ export async function boot({ wire = false } = {}) {
     document.body.classList.toggle('wire', WIRE);
     document.body.classList.toggle('focus', Boolean(s.focus));
     document.body.classList.toggle('cosmos', Boolean(s.cosmos));
+    const deck = deckOpen();
+    document.body.classList.toggle('deck', deck);
+    surface?.setPaused?.(deck);
     render(shell(s), ui);
     mountMini();
     const next = buildHash({ iso: s.id?.length === 2 ? s.id : null, placeId: s.id?.length === 2 ? null : s.id, section: s.section, city: s.city?.id || null, lang: s.lang });
@@ -1215,7 +1266,7 @@ export async function boot({ wire = false } = {}) {
   if (hashed?.iso && world.byIso.get(hashed.iso)) opening = hashed.iso;
   else if (hashed?.placeId && world.byPlace.get(hashed.placeId)) opening = hashed.placeId;
   else opening = await chooseOpening(store.get());
-  select(opening, { fly: true });
+  select(opening, { fly: true, section: hashed?.section || null });
   if (readSetting('coached', false)) document.getElementById('coach').hidden = true;
   setTimeout(() => { document.getElementById('coach').hidden = true; writeSetting('coached', true); }, 9000);
 
@@ -1231,7 +1282,7 @@ export async function boot({ wire = false } = {}) {
       return;
     }
     if (s.city && !next.city) closeCity();
-    if (id && id !== s.id && countryOf(id)) select(id, { section: next.section || s.section });
+    if (id && id !== s.id && countryOf(id)) select(id, { section: next.section || null });
     else if (next.section && next.section !== s.section) on('section', next.section);
   });
   if (hashed?.city) {
@@ -1262,7 +1313,7 @@ export async function boot({ wire = false } = {}) {
     const next = { tick4: (s.tick4 || 0) + 1 };
     const code = countryOf(s.id)?.currencies?.[0]?.code;
     const n = shownBills(code, s.moneyOld).length;
-    if (n > 1 && s.section === 'inicio' && !(s.moneyHold && Date.now() - s.moneyHold < 8000)) next.moneyIdx = (s.moneyIdx + 1) % n;
+    if (n > 1 && (s.section === 'identidad' || s.section === 'datos') && !(s.moneyHold && Date.now() - s.moneyHold < 8000)) next.moneyIdx = (s.moneyIdx + 1) % n;
     store.set(next);
   }, 4000);
   // Performance readout, refreshed only while the settings dialog is open.
@@ -1273,14 +1324,31 @@ export async function boot({ wire = false } = {}) {
   }, 1000);
   watchPerformance();
 
+  // A sideways wheel (trackpad) or shift+wheel passes to the next panel.
+  let wheelAt = 0;
+  window.addEventListener('wheel', (event) => {
+    if (!deckOpen()) return;
+    const dx = event.shiftKey ? event.deltaY : event.deltaX;
+    if (Math.abs(dx) < 24 || Math.abs(dx) < Math.abs(event.deltaY) * (event.shiftKey ? 0 : 1.2)) return;
+    const now = performance.now();
+    if (now - wheelAt < 650) return;
+    wheelAt = now;
+    on('panel-step', dx > 0 ? 1 : -1);
+  }, { passive: true });
   window.addEventListener('keydown', (event) => {
     const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
     if (event.key === '/' && !typing) { event.preventDefault(); document.getElementById('q').focus(); return; }
     if (event.key === 'Escape' && !typing) {
       if (store.get().cosmos) { on('level', 'earth'); return; }
       if (store.get().focus) { exitFocus(); return; }
+      if (deckOpen()) { on('collapse'); return; }
     }
     if (typing || !surface) return;
+    if (deckOpen()) {
+      if (event.key === 'ArrowLeft') on('panel-step', -1);
+      else if (event.key === 'ArrowRight') on('panel-step', 1);
+      return;
+    }
     const step = 28;
     if (event.key === 'ArrowLeft') surface.control?.nudge(-step, 0);
     else if (event.key === 'ArrowRight') surface.control?.nudge(step, 0);

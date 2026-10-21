@@ -1,20 +1,17 @@
-// Inicio: what you see the moment a country opens. Media first, words on
-// hover. One rectangle for the banknote and a circle for the coin, a sound
-// bar (anthem, one local station with shuffle), two windows that slide
-// through the country's food and its places, a news window, and the music
-// genres born there. Every window is a door into its section.
+// Media pieces shared by the panels of the deck (deck.js): the sound bar
+// (anthem, one station with shuffle), a window that cross-fades through a
+// list of photos, the news line, the people row. Pure templates; the 4 s
+// beat (`tick4`) and the radio state come from app/app.js.
 
 import { html, nothing } from 'lit';
-import { keyed } from 'lit/directives/keyed.js';
 import { t, locale } from '../app/i18n.js';
 import { commonsThumb } from '../live/sources.js';
 import { aiModeUrl, headlinePrompt } from '../live/ask.js';
-import { renderMoney } from './money.js';
 import { renderRadio } from './sections.js';
 
 // Two <img> slots so a slide can cross-fade: the slot whose parity matches
 // the index is visible; the other already holds the next picture.
-function slides(items, idx, src) {
+export function slides(items, idx, src) {
   if (!items.length) return nothing;
   const n = items.length;
   const a = idx % 2 === 0 ? idx : (idx + 1) % n;
@@ -24,7 +21,7 @@ function slides(items, idx, src) {
     <img class=${idx % 2 === 1 ? 'on' : ''} src=${src(items[b])} alt="" loading="lazy" @error=${(e) => { e.target.hidden = true; }}>`;
 }
 
-function timeAgo(iso, lang) {
+export function timeAgo(iso, lang) {
   const ms = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(ms)) return '';
   const h = Math.round(ms / 3600e3);
@@ -34,36 +31,10 @@ function timeAgo(iso, lang) {
   return lang === 'es' ? `hace ${d} días` : `${d} days ago`;
 }
 
-export function renderInicio(m) {
-  const { lang, country, content, places, culture, on } = m;
-  const tick = m.tick4 || 0;
-  const name = country.name[lang] || country.name.en;
-
-  // Food: the deep list when it exists, the curated handful otherwise.
-  const dishes = (content.food?.all?.length ? content.food.all : (places?.dishes || [])).filter((d) => d.image);
-  const dIdx = dishes.length ? Math.floor(tick / 2) % dishes.length : 0;
-  const dish = dishes[dIdx];
-  const dishName = dish ? (dish.label?.[lang] || dish.label?.en || dish.label?.local || '') : '';
-  const dishLocal = dish?.label?.local && dish.label.local !== dishName ? dish.label.local : '';
-  const dishRegion = dish?.region?.[lang] || dish?.region?.es || '';
-
-  // Places: World Heritage first, then the landmarks people visit.
-  const sites = [...(places?.heritage || []), ...(places?.landmarks || [])].filter((p) => p.image);
-  const pIdx = sites.length ? Math.floor((tick + 1) / 2) % sites.length : 0;
-  const site = sites[pIdx];
-
-  // News: one headline at a time, in the reader's language first.
-  const news = content.news;
-  const items = news ? [...(news[lang] || []), ...(news[lang === 'es' ? 'en' : 'es'] || [])] : [];
-  const nIdx = items.length ? Math.floor(tick / 2) % items.length : 0;
-  const headline = items[nIdx];
-
-  const genres = culture?.music?.genres || [];
-  const yt = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
-
-  return keyed(country.iso2 || country.placeId, html`
-    ${renderMoney(m)}
-
+// Anthem (sung first) and one local station with shuffle.
+export function renderSoundBar(m) {
+  const { lang, country, culture, on } = m;
+  return html`
     <div class="soundbar">
       ${culture?.anthem?.audio || culture?.anthem?.audioVocal ? (() => {
         const current = m.radio?.station?.id === `anthem-${country.iso2}`;
@@ -80,41 +51,75 @@ export function renderInicio(m) {
         </div>`;
       })() : nothing}
       ${renderRadio(m, { compact: true })}
-    </div>
+    </div>`;
+}
 
-    <div class="windows">
-      ${dishes.length ? html`
-        <button class="window food" @click=${() => on('section', 'comida')} title=${t(lang, 'windowFood')}>
-          ${slides(dishes, dIdx, (d) => commonsThumb(d.image, 640))}
-          <span class="cap"><b>${dishName}</b>${dishLocal ? html`<small>${dishLocal}</small>` : nothing}${dishRegion ? html`<small>${dishRegion}</small>` : nothing}</span>
-          <span class="tag">${t(lang, 'windowFood')}${dishes.length > 1 ? ` · ${dishes.length}` : ''}</span>
-        </button>` : nothing}
-      ${sites.length ? html`
-        <button class="window places" @click=${() => on('section', 'lugares')} title=${t(lang, 'windowPlaces')}>
-          ${slides(sites, pIdx, (p) => commonsThumb(p.image, 640))}
-          <span class="cap"><b>${site.label?.[lang] || site.label?.en || ''}</b>${site.year ? html`<small>UNESCO · ${site.year}</small>` : site.desc?.[lang] || site.desc?.en ? html`<small>${site.desc?.[lang] || site.desc?.en}</small>` : nothing}</span>
-          <span class="tag">${t(lang, 'windowPlaces')}${sites.length > 1 ? ` · ${sites.length}` : ''}</span>
-        </button>` : nothing}
-    </div>
+// A window: photos cross-fading, the caption always on, a tag on hover.
+export function renderWindow({ items, idx, src, caption, tag, onOpen, cls = '' }) {
+  if (!items.length) return nothing;
+  const it = items[idx % items.length];
+  return html`
+    <button class="window ${cls}" @click=${onOpen} title=${tag || ''}>
+      ${slides(items, idx % items.length, src)}
+      <span class="cap">${caption(it)}</span>
+      ${tag ? html`<span class="tag">${tag}${items.length > 1 ? ` · ${items.length}` : ''}</span>` : nothing}
+    </button>`;
+}
 
-    ${news === undefined || news === null ? html`<div class="skel tall" style="height:88px"></div>` : headline ? html`
-      <div class="newsline">
-        <a class="head" href=${headline.url} target="_blank" rel="noreferrer">${headline.title}</a>
-        <div class="meta">
-          <span>${headline.source || ''}</span>
-          ${headline.published ? html`<span>${timeAgo(headline.published, lang)}</span>` : nothing}
-          <a class="ctx" href=${aiModeUrl(headlinePrompt(headline.title, name, lang))} target="_blank" rel="noreferrer noopener" title=${t(lang, 'contextTitle')}>✦ ${t(lang, 'context')}</a>
-          <button class="linkish" @click=${() => on('section', 'ahora')}>${t(lang, 'seeAll')} · ${items.length}</button>
-        </div>
-        <div class="dots">${items.slice(0, 12).map((_, i) => html`<i class=${i === nIdx % 12 ? 'on' : ''}></i>`)}</div>
+// One headline at a time with its Contexto link; the dots show the rest.
+export function renderNewsLine(m, { big = false } = {}) {
+  const { lang, country, content, on } = m;
+  const news = content.news;
+  const name = country.name[lang] || country.name.en;
+  const items = news ? [...(news[lang] || []), ...(news[lang === 'es' ? 'en' : 'es'] || [])] : [];
+  if (news === undefined || news === null) return html`<div class="skel tall" style="height:88px"></div>`;
+  if (!items.length) return html`<p class="muted small">${t(lang, 'nowNoNews')}</p>`;
+  const nIdx = Math.floor((m.tick4 || 0) / 2) % items.length;
+  const headline = items[nIdx];
+  return html`
+    <div class="newsline ${big ? 'big' : ''}">
+      <a class="head" href=${headline.url} target="_blank" rel="noreferrer">${headline.title}</a>
+      <div class="meta">
+        <span>${headline.source || ''}</span>
+        ${headline.published ? html`<span>${timeAgo(headline.published, lang)}</span>` : nothing}
+        <a class="ctx" href=${aiModeUrl(headlinePrompt(headline.title, name, lang))} target="_blank" rel="noreferrer noopener" title=${t(lang, 'contextTitle')}>✦ ${t(lang, 'context')}</a>
+        ${on && !big ? html`<button class="linkish" @click=${() => on('panel', 'ahora')}>${t(lang, 'seeAll')} · ${items.length}</button>` : nothing}
+      </div>
+      <div class="dots">${items.slice(0, 12).map((_, i) => html`<i class=${i === nIdx % 12 ? 'on' : ''}></i>`)}</div>
+    </div>`;
+}
+
+const DOMAIN_RING = { arts: '#e4603a', science: '#2f6d9b', sports: '#1e7a3c', politics: '#8a5a2b', thought: '#6b4fa0', other: '#7a7064' };
+
+// Twelve faces in one row; the ring hints the domain, the line below
+// orders them by birth year. Names and domain on hover.
+export function renderPeopleRow(m) {
+  const { lang, culture } = m;
+  const people = (culture?.people || []).slice(0, 12);
+  if (!people.length) return nothing;
+  const years = people.map((p) => p.born).filter(Boolean);
+  const y0 = years.length ? Math.min(...years) : 1800;
+  const y1 = years.length ? Math.max(...years, y0 + 50) : 2000;
+  const domainLabel = (d) => ({
+    es: { arts: 'artes', science: 'ciencia', sports: 'deporte', politics: 'historia y política', thought: 'pensamiento', other: '' },
+    en: { arts: 'arts', science: 'science', sports: 'sports', politics: 'history and politics', thought: 'thought', other: '' },
+  })[lang]?.[d] || '';
+  return html`
+    <div class="people-row" aria-label=${t(lang, 'people')}>
+      ${people.map((p) => html`
+        <a class="face" href=${`https://www.wikidata.org/wiki/${p.qid}`} target="_blank" rel="noreferrer" style=${`--ring:${DOMAIN_RING[p.domain] || DOMAIN_RING.other}`}
+          title=${[p.label?.[lang] || p.label?.en, p.job?.[lang] || p.job?.en, p.born ? `${p.born}${p.died ? `–${p.died}` : ''}` : ''].filter(Boolean).join(' · ')}>
+          ${p.image ? html`<img loading="lazy" src=${commonsThumb(p.image, 200)} alt="">` : html`<span class="noface">${(p.label?.[lang] || p.label?.en || '?').slice(0, 1)}</span>`}
+          <b>${p.label?.[lang] || p.label?.en}</b>
+          <small>${[domainLabel(p.domain), p.born].filter(Boolean).join(' · ')}</small>
+        </a>`)}
+    </div>
+    ${years.length > 2 ? html`
+      <div class="epoch" aria-hidden="true">
+        ${people.filter((p) => p.born).map((p) => html`<i style=${`left:${(((p.born - y0) / Math.max(1, y1 - y0)) * 100).toFixed(1)}%;background:${DOMAIN_RING[p.domain] || DOMAIN_RING.other}`}></i>`)}
+        <span class="lo">${y0}</span><span class="hi">${y1}</span>
       </div>` : nothing}
-
-    ${genres.length ? html`
-      <div class="chips music" aria-label=${t(lang, 'music')}>
-        ${genres.slice(0, 8).map((g) => html`<a class="chip yt" href=${yt(`${g.label?.[lang] || g.label?.en} ${lang === 'es' ? 'música' : 'music'} ${country.name.en}`)} target="_blank" rel="noreferrer" title=${g.desc?.[lang] || g.desc?.en || ''}>▶ ${g.label?.[lang] || g.label?.en}</a>`)}
-      </div>` : html`
-      <div class="chips music"><a class="chip yt" href=${yt(`${lang === 'es' ? 'música de' : 'music of'} ${name}`)} target="_blank" rel="noreferrer">▶ ${t(lang, 'music')}</a></div>`}
-  `);
+    <p class="small muted">${t(lang, 'peopleNote')}</p>`;
 }
 
 export { locale };

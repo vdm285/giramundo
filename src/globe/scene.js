@@ -439,8 +439,10 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     return current + (target - current) * (1 - Math.exp(-speed * dt));
   }
 
+  let paused = false;
   function frame(now) {
     if (!running) return;
+    if (paused) { lastNow = now; requestAnimationFrame(frame); return; }
     const dt = Math.min(0.05, (now - lastNow) / 1000);
     lastNow = now;
     const moving = control.update(now, dt);
@@ -635,6 +637,8 @@ export async function createGlobe(canvas, world, { base, reduced = false } = {})
     project,
     markerAt,
     flyTo: control.flyTo,
+    // Under the full-screen deck nothing of the globe shows; stop drawing.
+    setPaused(p) { paused = Boolean(p); if (!paused) dirtyFrames = 4; },
     onTap: control.onTap,
     onMove: control.onMove,
     setStyle(style) {

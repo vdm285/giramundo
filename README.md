@@ -48,7 +48,7 @@ If none of that helps, the gear menu has **Sencilla** (fewer effects) and the **
 - `src/globe/`: the Three.js globe. `scene.js` builds the scene, `camera.js` handles drag, zoom and flights, `shaders.js` is the GLSL, `paint.js` paints the country-id and border textures.
 - `src/flat/map.js`: the flat equirectangular map, drawn with Canvas 2D. Same picking, same dossier.
 - `src/app/`: the controller (`app.js`), the store, the hash router, the strings.
-- `src/dossier/`: the country panel: Inicio (overview), Ahora, Historia, Comida, Cultura, Lugares, Ver, Datos.
+- `src/dossier/`: the country deck: nine panels (Ahora, Identidad, Comida, Lugares, Gente, Música, Caminar, Historia, Datos) and the shelf.
 - `src/live/sources.js`: every live source the browser calls, and the deploy-time files it reads.
 - `src/data/`: loading and shaping the country data; `src/geo/`: sphere math, picking, oceans.
 - `tools/`: build scripts for facts, Wikipedia extracts, World Bank indicators, headlines, places and videos.

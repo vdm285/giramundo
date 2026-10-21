@@ -1,9 +1,12 @@
-// The hash is the share link: #mx (opens Inicio), #mx/historia, #jp/ver/en, #somaliland/ahora.
+// The hash is the share link: #mx (the opening rule picks the panel), #mx/historia, #jp/caminar/en, #somaliland/ahora.
 // Country first (ISO 3166-1 alpha-2, lowercase, or a place id for the two
 // shapes without a code), then the section, then an optional language.
 
-export const SECTIONS = ['inicio', 'ahora', 'historia', 'comida', 'cultura', 'lugares', 'ver', 'datos'];
+// The nine panels of a country, in shelf order.
+export const SECTIONS = ['ahora', 'identidad', 'comida', 'lugares', 'gente', 'musica', 'caminar', 'historia', 'datos'];
 const SECTION_SET = new Set(SECTIONS);
+// Older links keep working.
+const ALIASES = { inicio: 'identidad', cultura: 'gente', ver: 'caminar' };
 
 // A city inside a country: #mx/ciudad/mx-guadalajara (the id comes from
 // public/data/cities.json).
@@ -13,7 +16,8 @@ export function parseHash(hash) {
   const iso = /^[a-z]{2}$/i.test(parts[0]) ? parts[0].toUpperCase() : null;
   const placeId = iso ? null : parts[0];
   const city = parts[1] === 'ciudad' && parts[2] ? parts[2] : null;
-  const section = SECTION_SET.has(parts[1]) ? parts[1] : null;
+  const raw = ALIASES[parts[1]] || parts[1];
+  const section = SECTION_SET.has(raw) ? raw : null;
   let lang = null;
   if (parts.includes('en')) lang = 'en';
   else if (parts.includes('es')) lang = 'es';
@@ -25,7 +29,7 @@ export function buildHash({ iso, placeId, section, city, lang }) {
   if (!id) return '#';
   const parts = [id];
   if (city) parts.push('ciudad', city);
-  else if (section && section !== 'inicio') parts.push(section);
+  else if (section) parts.push(section);
   if (lang === 'en') parts.push('en');
   return `#${parts.join('/')}`;
 }
